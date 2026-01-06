@@ -25,9 +25,20 @@ Open [http://localhost:3000](http://localhost:3000)
 ## Features
 
 - **Smart Elicitation**: AI-guided conversation to structure your decision
+- **Verification Step**: Review and toggle extracted options/criteria before proceeding
 - **Weighted Scoring**: Prioritize criteria that matter most to you
-- **Contrastive Explanations**: Understand why one option won and what could change
+- **Contrastive Explanations**: Understand why one option won (or tied!) and what could change
+- **Tie Detection**: Special handling when options score equally
 - **Q&A Chat**: Ask follow-up questions about your results
+- **State Preservation**: Your choices are saved when navigating back
+
+## User Flow
+
+1. **Describe Dilemma** → Enter your decision in natural language
+2. **Verification** → Review extracted options/criteria with toggles
+3. **Prioritize Criteria** → Set importance weights (1-5)
+4. **Rate Options** → Score each option on each criterion
+5. **View Results** → See winner/tie with LLM-powered explanations
 
 ## Tech Stack
 
@@ -43,16 +54,23 @@ src/
 │   ├── api/
 │   │   ├── analyze-input/   # Extract options/criteria from description
 │   │   ├── chat/            # Smart Elicitation conversation
-│   │   ├── explain/         # Contrastive explanations
+│   │   ├── explain/         # Contrastive explanations (with tie support)
 │   │   └── qa/              # Q&A about results
 │   ├── page.js              # Main app with phase management
 │   └── globals.css          # Styling
 ├── components/
-│   ├── InputPhase.js        # Welcome + Smart Elicitation
+│   ├── InputPhase.js        # Welcome + Smart Elicitation + Verification
 │   ├── CriteriaPhase.js     # Priority weighting
 │   ├── RatingPhase.js       # Score each option
-│   ├── ExplanationView.js   # Results + explanations
+│   ├── ExplanationView.js   # Results + explanations + tie handling
 │   └── EditOptionsPhase.js  # Review/edit options mid-flow
 └── lib/
     └── gemini.js            # Shared Gemini AI client
 ```
+
+## Key Design Decisions
+
+- **Anti-hallucination prompts**: LLM only extracts explicitly mentioned items
+- **Natural language explanations**: Weights/scores translated (e.g., 5 → "very important")
+- **Tie handling**: Special UI and explanations when options score equally
+- **State preservation**: Weights, scores, and descriptions persist when navigating back

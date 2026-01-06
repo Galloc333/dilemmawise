@@ -3,8 +3,13 @@ import { useState, useRef, useEffect } from 'react';
 
 export default function ExplanationView({ results, onReset, onBackToRating, onEditOptions }) {
     const { scores, weights, ranking } = results;
-    const winner = ranking[0];
-    const maxScore = ranking[0].score;
+    const topScore = ranking[0].score;
+
+    // Detect ties: all options with the same top score
+    const tiedWinners = ranking.filter(item => item.score === topScore);
+    const hasTie = tiedWinners.length > 1;
+    const winner = ranking[0]; // Still use first for API calls
+    const maxScore = topScore;
 
     // Explanation state (from LLM)
     const [whyItWon, setWhyItWon] = useState('');
@@ -37,7 +42,9 @@ export default function ExplanationView({ results, onReset, onBackToRating, onEd
                         winner,
                         ranking,
                         weights,
-                        scores
+                        scores,
+                        hasTie,
+                        tiedWinners
                     })
                 });
                 const data = await response.json();
@@ -46,8 +53,13 @@ export default function ExplanationView({ results, onReset, onBackToRating, onEd
             } catch (error) {
                 console.error('Explanation error:', error);
                 // Fallback explanations
-                setWhyItWon(`${winner.option} ranked highest based on your weighted criteria priorities.`);
-                setWhatCouldChange('Try adjusting your criteria weights to see how results might change.');
+                if (hasTie) {
+                    setWhyItWon(`${tiedWinners.map(w => w.option).join(' and ')} scored equally because they performed similarly on your weighted criteria.`);
+                    setWhatCouldChange('To break the tie, consider adjusting your criteria weights or re-rating how well each option satisfies your priorities.');
+                } else {
+                    setWhyItWon(`${winner.option} ranked highest based on your weighted criteria priorities.`);
+                    setWhatCouldChange('Try adjusting your criteria weights to see how results might change.');
+                }
             } finally {
                 setIsLoadingExplanation(false);
             }
@@ -89,47 +101,72 @@ export default function ExplanationView({ results, onReset, onBackToRating, onEd
 
     return (
         <div className="animate-in">
-            {/* Winner Announcement */}
+            {/* Winner/Tie Announcement */}
             <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
-                <div className="winner-badge" style={{ marginBottom: '1rem' }}>
-                    🏆 Top Recommendation
-                </div>
-                <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>{winner.option}</h1>
-                <p style={{ fontSize: '1.2rem', color: 'hsl(var(--foreground) / 0.6)' }}>
-                    Based on your priorities, this option scored <strong>{winner.score.toFixed(1)}</strong> points.
-                </p>
+                {hasTie ? (
+                    <>
+                        <div className="winner-badge" style={{ marginBottom: '1rem', background: 'linear-gradient(135deg, #f59e0b, #ef4444)' }}>
+                            🤝 It's a Tie!
+                        </div>
+                        <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>
+                            {tiedWinners.map(w => w.option).join(' & ')}
+                        </h1>
+                        <p style={{ fontSize: '1.2rem', color: 'hsl(var(--foreground) / 0.6)' }}>
+                            These options scored equally at <strong>{topScore.toFixed(1)}</strong> points based on your priorities.
+                        </p>
+                        <p style={{ fontSize: '1rem', color: 'hsl(var(--foreground) / 0.5)', marginTop: '0.5rem' }}>
+                            Consider adjusting your criteria weights or ratings to break the tie.
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <div className="winner-badge" style={{ marginBottom: '1rem' }}>
+                            🏆 Top Recommendation
+                        </div>
+                        <h1 style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>{winner.option}</h1>
+                        <p style={{ fontSize: '1.2rem', color: 'hsl(var(--foreground) / 0.6)' }}>
+                            Based on your priorities, this option scored <strong>{winner.score.toFixed(1)}</strong> points.
+                        </p>
+                    </>
+                )}
             </div>
 
             {/* Visual Score Comparison */}
             <div className="card" style={{ marginBottom: '2rem' }}>
                 <h2 style={{ marginBottom: '1.5rem' }}>Score Comparison</h2>
-                {ranking.map((item, idx) => (
-                    <div key={item.option} className="score-bar-container">
-                        <div className="score-bar-label">
-                            {idx === 0 && <span style={{ marginRight: '0.5rem' }}>🥇</span>}
-                            {idx === 1 && <span style={{ marginRight: '0.5rem' }}>🥈</span>}
-                            {item.option}
+                {ranking.map((item, idx) => {
+                    const isTiedWinner = item.score === topScore;
+                    const isSecondPlace = !isTiedWinner && idx === tiedWinners.length;
+                    return (
+                        <div key={item.option} className="score-bar-container">
+                            <div className="score-bar-label">
+                                {isTiedWinner && <span style={{ marginRight: '0.5rem' }}>{hasTie ? '🤝' : '🥇'}</span>}
+                                {isSecondPlace && <span style={{ marginRight: '0.5rem' }}>🥈</span>}
+                                {item.option}
+                            </div>
+                            <div className="score-bar-wrapper">
+                                <div
+                                    className="score-bar-fill"
+                                    style={{
+                                        width: `${(item.score / maxScore) * 100}%`,
+                                        background: isTiedWinner
+                                            ? hasTie
+                                                ? 'linear-gradient(90deg, #f59e0b, #ef4444)'
+                                                : 'linear-gradient(90deg, hsl(var(--primary)), #a855f7)'
+                                            : 'hsl(var(--foreground) / 0.2)'
+                                    }}
+                                />
+                                <span className="score-bar-value">{item.score.toFixed(1)}</span>
+                            </div>
                         </div>
-                        <div className="score-bar-wrapper">
-                            <div
-                                className="score-bar-fill"
-                                style={{
-                                    width: `${(item.score / maxScore) * 100}%`,
-                                    background: idx === 0
-                                        ? 'linear-gradient(90deg, hsl(var(--primary)), #a855f7)'
-                                        : 'hsl(var(--foreground) / 0.2)'
-                                }}
-                            />
-                            <span className="score-bar-value">{item.score.toFixed(1)}</span>
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             {/* Insight Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
                 <div className="insight-card blue">
-                    <h3>💡 Why it won</h3>
+                    <h3>{hasTie ? '🤝 Why they tied' : '💡 Why it won'}</h3>
                     <p style={{ color: 'hsl(var(--foreground) / 0.8)', lineHeight: '1.7' }}>
                         {isLoadingExplanation ? 'Analyzing results...' : whyItWon}
                     </p>
