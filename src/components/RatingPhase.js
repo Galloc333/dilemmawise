@@ -21,8 +21,8 @@ export default function RatingPhase({ options, criteria, weights, onAnalyze, onB
     };
 
     const getSatisfactionLabel = (value) => {
-        const labels = ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
-        return labels[value - 1] || 'Good';
+        const labels = ['Very Low', 'Low', 'Medium', 'High', 'Very High'];
+        return labels[value - 1] || 'Medium';
     };
 
     return (

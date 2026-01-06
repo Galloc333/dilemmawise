@@ -7,17 +7,34 @@ Current context:
 - Options being considered: {options}
 - Criteria identified: {criteria}
 
-Your role:
-1. Help the user clarify their options and criteria
-2. Suggest additional options or criteria when asked
-3. Guide them through the decision-structuring process
-4. Be warm, supportive, and conversational
+Your Goal: Help the user define at least 2 distinct options and at least 1 criterion.
 
-When suggesting new options or criteria, clearly indicate them like:
-- "I'd suggest adding [Option Name] as an alternative..."
-- "You might want to consider [Criterion Name] as a factor..."
+Rules:
+1. **Validation**: 
+   - If the user has < 2 options, you MUST ask them what alternatives they are considering.
+   - If the user has < 1 criterion, you MUST ask them what factors are important (e.g., cost, speed, feeling).
+   - Do NOT suggest proceeding until these conditions are met.
 
-Keep responses concise (2-4 sentences typically).
+2. **Extraction**:
+   - ACTIVELY look for options and criteria in the user's messages.
+   - If the user implies an option (e.g., "I might go to Paris"), extract it.
+
+3. **Tone**:
+   - Be warm, concise, and helpful.
+   - Don't lecture. Just guide them naturally.
+
+CRITICAL INSTRUCTION:
+You MUST end EVERY response with a JSON block containing the specific options and criteria identified in the conversation so far, including any you just found.
+The user will NOT see this JSON block, so do not worry about cluttering the chat.
+
+Format:
+\`\`\`json
+{
+  "suggestedOptions": ["Option A", "Option B"],
+  "suggestedCriteria": ["Criterion A", "Criterion B"]
+}
+\`\`\`
+If no valid options/criteria are present yet, return empty arrays.
 `;
 
 export async function POST(request) {
@@ -38,27 +55,46 @@ export async function POST(request) {
         ];
 
         const result = await model.generateContent(conversationParts.map(p => p.text).join("\n\n"));
-        const responseText = result.response.text();
+        let responseText = result.response.text();
 
         // Try to extract any suggested options or criteria from the response
         const suggestedOptions = [];
         const suggestedCriteria = [];
 
-        // Simple pattern matching for suggestions
-        const optionMatch = responseText.match(/adding\s+["']?([^"'\n,]+)["']?\s+as an (option|alternative)/gi);
-        const criteriaMatch = responseText.match(/consider\s+["']?([^"'\n,]+)["']?\s+as a (factor|criterion)/gi);
+        // 1. Try to extract JSON block
+        const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+            try {
+                const data = JSON.parse(jsonMatch[1]);
+                if (Array.isArray(data.suggestedOptions)) {
+                    suggestedOptions.push(...data.suggestedOptions);
+                }
+                if (Array.isArray(data.suggestedCriteria)) {
+                    suggestedCriteria.push(...data.suggestedCriteria);
+                }
 
-        if (optionMatch) {
-            optionMatch.forEach(match => {
-                const extracted = match.match(/["']([^"']+)["']/);
-                if (extracted) suggestedOptions.push(extracted[1]);
-            });
+                // Remove the JSON block from the text shown to user so it looks clean
+                responseText = responseText.replace(jsonMatch[0], '').trim();
+            } catch (e) {
+                console.error("Failed to parse extracted JSON:", e);
+            }
         }
 
-        if (criteriaMatch) {
-            criteriaMatch.forEach(match => {
-                const extracted = match.match(/["']([^"']+)["']/);
-                if (extracted) suggestedCriteria.push(extracted[1]);
+        // 2. Fallback: Simple regex pattern matching in case the LLM ignores JSON instructions
+        if (suggestedOptions.length === 0 && suggestedCriteria.length === 0) {
+            // Regex to match "adding [X] as an option/alternative"
+            // Handles both quoted and unquoted: adding 'Foo'..., adding Foo...
+            const optionMatches = [...responseText.matchAll(/adding\s+(?:["']([^"']+)["']|([^"'\s,]+))\s+as an (?:option|alternative)/gi)];
+            optionMatches.forEach(match => {
+                const val = match[1] || match[2]; // match[1] is quoted group, match[2] is unquoted group
+                if (val) suggestedOptions.push(val);
+            });
+
+            // Regex to match "consider [X] as a factor/criterion"
+            const criteriaMatches = [...responseText.matchAll(/consider\s+(?:["']([^"']+)["']|([^"'\s,]+))\s+as a (?:factor|criterion)/gi)];
+            criteriaMatches.forEach(match => {
+                const val = match[1] || match[2];
+                if (val) suggestedCriteria.push(val);
             });
         }
 

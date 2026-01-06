@@ -1,24 +1,30 @@
 "use client";
 import { useState, useRef, useEffect } from 'react';
 
+// Icons
+const RobotIcon = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 4C16.42 4 20 7.58 20 12C20 16.42 16.42 20 12 20C7.58 20 4 16.42 4 12C4 7.58 7.58 4 12 4Z" fill="currentColor" fillOpacity="0.2" />
+        <path d="M12 6C8.69 6 6 8.69 6 12C6 15.31 8.69 18 12 18C15.31 18 18 15.31 18 12C18 8.69 15.31 6 12 6ZM12 8C14.21 8 16 9.79 16 12C16 14.21 14.21 16 12 16C9.79 16 8 14.21 8 12C8 9.79 9.79 8 12 8Z" fill="currentColor" />
+    </svg>
+);
+
 export default function InputPhase({ onNext, savedDescription }) {
-    const [description, setDescription] = useState(savedDescription || '');
-    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    // Core State
+    const [options, setOptions] = useState([]);
+    const [criteria, setCriteria] = useState([]);
+    const [showConfirmation, setShowConfirmation] = useState(false);
 
-    // Smart Elicitation State
-    const [chatMode, setChatMode] = useState(false);
-    const [messages, setMessages] = useState([]);
+    // Chat State
+    const [messages, setMessages] = useState([
+        {
+            role: 'assistant',
+            text: "Hi! I'm DilemmaWise. Describe the decision you're facing, and I'll help you structure it. \n\nFor example: \"Should I move to New York or stay in London?\""
+        }
+    ]);
     const [chatInput, setChatInput] = useState('');
-    const [suggestions, setSuggestions] = useState(null);
-    const [removedItems, setRemovedItems] = useState({ options: [], criteria: [] });
+    const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef(null);
-
-    // Verification Mode State (for happy path)
-    const [verificationMode, setVerificationMode] = useState(false);
-    const [extractedOptions, setExtractedOptions] = useState([]);
-    const [extractedCriteria, setExtractedCriteria] = useState([]);
-    const [selectedOptions, setSelectedOptions] = useState({});
-    const [selectedCriteria, setSelectedCriteria] = useState({});
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -28,52 +34,14 @@ export default function InputPhase({ onNext, savedDescription }) {
         scrollToBottom();
     }, [messages]);
 
-    const analyzeInput = async () => {
-        setIsAnalyzing(true);
-
-        try {
-            const response = await fetch('/api/analyze-input', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ description })
-            });
-
-            const data = await response.json();
-
-            if (data.error || data.isVague || !data.options || data.options.length < 2) {
-                // Need more info: Switch to Chat Mode
-                setChatMode(true);
-                setMessages([
-                    { role: 'assistant', text: "I see you're thinking about a decision, but I need a bit more detail to help structure it. What specific options are you considering? For example, are you choosing between 'Option A vs Option B'?" }
-                ]);
-            } else {
-                // Happy Path: Got enough info - show verification
-                setExtractedOptions(data.options);
-                setExtractedCriteria(data.criteria || []);
-                // Initialize all as selected
-                setSelectedOptions(data.options.reduce((acc, opt) => ({ ...acc, [opt]: true }), {}));
-                setSelectedCriteria((data.criteria || []).reduce((acc, crit) => ({ ...acc, [crit]: true }), {}));
-                setVerificationMode(true);
-            }
-        } catch (error) {
-            console.error("Analysis error:", error);
-            // Fallback to chat mode on error
-            setChatMode(true);
-            setMessages([
-                { role: 'assistant', text: "I'd like to understand your decision better. What are the main options you're considering?" }
-            ]);
-        } finally {
-            setIsAnalyzing(false);
-        }
-    };
-
+    // Chat interaction
     const handleChatSubmit = async () => {
         if (!chatInput.trim()) return;
 
         const newMessages = [...messages, { role: 'user', text: chatInput }];
         setMessages(newMessages);
-        const userInput = chatInput;
         setChatInput('');
+        setIsTyping(true);
 
         try {
             const response = await fetch('/api/chat', {
@@ -81,564 +49,386 @@ export default function InputPhase({ onNext, savedDescription }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     messages: newMessages,
-                    currentOptions: suggestions?.options || [],
-                    currentCriteria: suggestions?.criteria || []
+                    currentOptions: options,
+                    currentCriteria: criteria
                 })
             });
-
             const data = await response.json();
 
             // Add assistant response
             setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
 
-            // If LLM suggested new options/criteria, or if we don't have suggestions yet, try to extract
-            if (!suggestions && newMessages.length >= 3) {
-                // After a few exchanges, try to extract options/criteria from the conversation
-                const extractResponse = await fetch('/api/analyze-input', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        description: newMessages.map(m => m.text).join(' ')
-                    })
-                });
-                const extractData = await extractResponse.json();
-
-                if (extractData.options?.length >= 2) {
-                    setMessages(prev => [...prev, {
-                        role: 'assistant',
-                        text: "Based on our conversation, here's what I've identified:"
-                    }]);
-                    setSuggestions({
-                        options: extractData.options,
-                        criteria: extractData.criteria
-                    });
-                }
-            } else if (suggestions && data.suggestedOptions?.length > 0) {
-                // Add any newly suggested options
-                setSuggestions(prev => ({
-                    ...prev,
-                    options: [...new Set([...prev.options, ...data.suggestedOptions])]
-                }));
-            } else if (suggestions && data.suggestedCriteria?.length > 0) {
-                // Add any newly suggested criteria
-                setSuggestions(prev => ({
-                    ...prev,
-                    criteria: [...new Set([...prev.criteria, ...data.suggestedCriteria])]
-                }));
+            // Automatically add suggestions
+            if (data.suggestedOptions?.length > 0) {
+                setOptions(prev => [...new Set([...prev, ...data.suggestedOptions])]);
+            }
+            if (data.suggestedCriteria?.length > 0) {
+                setCriteria(prev => [...new Set([...prev, ...data.suggestedCriteria])]);
             }
         } catch (error) {
             console.error("Chat error:", error);
-            setMessages(prev => [...prev, {
-                role: 'assistant',
-                text: "I'm having trouble connecting. Could you try again?"
-            }]);
+            setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I had trouble connecting. Please try again." }]);
+        } finally {
+            setIsTyping(false);
         }
     };
 
-    const removeOption = (optionToRemove) => {
-        setSuggestions(prev => ({
-            ...prev,
-            options: prev.options.filter(opt => opt !== optionToRemove)
-        }));
-        setRemovedItems(prev => ({
-            ...prev,
-            options: [...prev.options, optionToRemove]
-        }));
-    };
+    const handleRemoveOption = (opt) => setOptions(prev => prev.filter(o => o !== opt));
+    const handleRemoveCriterion = (crit) => setCriteria(prev => prev.filter(c => c !== crit));
 
-    const removeCriterion = (criterionToRemove) => {
-        setSuggestions(prev => ({
-            ...prev,
-            criteria: prev.criteria.filter(crit => crit !== criterionToRemove)
-        }));
-        setRemovedItems(prev => ({
-            ...prev,
-            criteria: [...prev.criteria, criterionToRemove]
-        }));
-    };
+    const canSubmit = options.length >= 2 && criteria.length >= 1;
 
-    const restoreOption = (optionToRestore) => {
-        setSuggestions(prev => ({
-            ...prev,
-            options: [...prev.options, optionToRestore]
-        }));
-        setRemovedItems(prev => ({
-            ...prev,
-            options: prev.options.filter(opt => opt !== optionToRestore)
-        }));
-    };
+    const [isValidating, setIsValidating] = useState(false);
+    const [validationResult, setValidationResult] = useState(null);
 
-    const restoreCriterion = (criterionToRestore) => {
-        setSuggestions(prev => ({
-            ...prev,
-            criteria: [...prev.criteria, criterionToRestore]
-        }));
-        setRemovedItems(prev => ({
-            ...prev,
-            criteria: prev.criteria.filter(crit => crit !== criterionToRestore)
-        }));
-    };
-
-    const restartChat = () => {
-        const confirmed = window.confirm(
-            "Are you sure you want to start over?\n\nThis will clear the entire conversation and all extracted options/criteria. You'll need to describe your dilemma again from scratch."
-        );
-
-        if (confirmed) {
-            setChatMode(false);
-            setMessages([]);
-            setSuggestions(null);
-            setRemovedItems({ options: [], criteria: [] });
-            setDescription('');
+    const handleInitialSubmit = async () => {
+        setIsValidating(true);
+        try {
+            // Check for logical consistency
+            const res = await fetch('/api/validate-matrix', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ options, criteria })
+            });
+            const data = await res.json();
+            setValidationResult(data);
+        } catch (e) {
+            console.error("Validation failed", e);
+            setValidationResult({ isValid: true }); // Fallback to allow proceeding if validation fails
+        } finally {
+            setIsValidating(false);
+            setShowConfirmation(true);
         }
+    };
+
+    const confirmAndProceed = () => {
+        const description = messages.filter(m => m.role === 'user').map(m => m.text).join('\n');
+        onNext({ options, criteria }, description);
     };
 
     return (
-        <div className="animate-in">
-            {/* Large Logo */}
-            <div className="logo logo-large">DilemmaWise</div>
+        <div className="animate-in max-w-6xl mx-auto h-[calc(100vh-8rem)] min-h-[500px]">
+            {/* Header */}
+            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                <div className="logo logo-large" style={{ fontSize: '1.8rem' }}>DilemmaWise</div>
+            </div>
 
-            {!chatMode && !verificationMode ? (
-                <>
-                    {/* Welcome Message */}
-                    <p className="welcome-message">
-                        Feeling stuck on a big decision? DilemmaWise uses AI to help you structure your thoughts,
-                        weigh your priorities, and discover which option truly fits you best.
-                    </p>
+            <div className="grid md:grid-cols-3 gap-6 h-full">
 
-                    {/* Main Input Area */}
-                    <div className="max-w-2xl mx-auto">
-                        <div className="card">
-                            <h2 style={{ marginBottom: '1rem' }}>Describe your dilemma</h2>
-                            <textarea
-                                className="textarea-premium"
-                                placeholder="e.g., I'm trying to decide between two job offers. One is at an exciting startup with equity but lower pay, and the other is a stable corporate role with great benefits but less growth potential..."
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                            />
-                        </div>
-
-                        <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-                            <button
-                                onClick={analyzeInput}
-                                disabled={!description.trim() || isAnalyzing}
-                                className="btn btn-primary btn-lg"
-                                style={{
-                                    opacity: (!description.trim() || isAnalyzing) ? 0.5 : 1,
-                                    cursor: (!description.trim() || isAnalyzing) ? 'not-allowed' : 'pointer'
-                                }}
-                            >
-                                {isAnalyzing ? (
-                                    <>
-                                        <span style={{ marginRight: '0.5rem' }}>✨</span>
-                                        Analyzing...
-                                    </>
-                                ) : (
-                                    <>
-                                        Let's Structure This
-                                        <span style={{ marginLeft: '0.5rem' }}>→</span>
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </>
-            ) : verificationMode ? (
-                /* Verification Mode - Review Extracted Items */
-                <div className="max-w-2xl mx-auto">
-                    <p className="welcome-message" style={{ marginBottom: '2rem' }}>
-                        I've analyzed your dilemma. Here's what I found — toggle items on or off to customize your decision framework.
-                    </p>
-
-                    {/* Options Section */}
-                    <div className="card" style={{ marginBottom: '1.5rem' }}>
-                        <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span style={{ fontSize: '1.25rem' }}>🎯</span> Your Options
+                {/* Left Panel: Decision Structure */}
+                <div className="card md:col-span-1" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', borderRight: '1px solid hsl(var(--border))' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>🧩</span> Structure
                         </h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            {extractedOptions.map((option) => (
-                                <div
-                                    key={option}
-                                    onClick={() => setSelectedOptions(prev => ({ ...prev, [option]: !prev[option] }))}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        padding: '1rem 1.25rem',
-                                        borderRadius: '12px',
-                                        background: selectedOptions[option]
-                                            ? 'linear-gradient(135deg, hsl(var(--primary) / 0.15), hsl(280 70% 60% / 0.1))'
-                                            : 'hsl(var(--foreground) / 0.05)',
-                                        border: selectedOptions[option]
-                                            ? '2px solid hsl(var(--primary) / 0.5)'
-                                            : '2px solid transparent',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s ease',
-                                        opacity: selectedOptions[option] ? 1 : 0.5
-                                    }}
-                                >
-                                    <span style={{ fontWeight: '500' }}>{option}</span>
-                                    <div style={{
-                                        width: '44px',
-                                        height: '24px',
-                                        borderRadius: '12px',
-                                        background: selectedOptions[option]
-                                            ? 'linear-gradient(90deg, hsl(var(--primary)), #a855f7)'
-                                            : 'hsl(var(--foreground) / 0.2)',
-                                        position: 'relative',
-                                        transition: 'all 0.2s ease'
-                                    }}>
-                                        <div style={{
-                                            width: '18px',
-                                            height: '18px',
-                                            borderRadius: '50%',
-                                            background: 'white',
-                                            position: 'absolute',
-                                            top: '3px',
-                                            left: selectedOptions[option] ? '23px' : '3px',
-                                            transition: 'all 0.2s ease',
-                                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                                        }} />
+                        <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>{canSubmit ? 'Ready' : 'Incomplete'}</span>
+                    </div>
+
+                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        {/* Options List */}
+                        <div>
+                            <h4 style={{ fontSize: '0.85rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '0.75rem' }}>
+                                Options
+                            </h4>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                {options.length === 0 && <span style={{ fontSize: '0.85rem', color: 'hsl(var(--foreground) / 0.4)', fontStyle: 'italic' }}>None yet</span>}
+                                {options.map((opt, i) => (
+                                    <div key={i} className="chip">
+                                        {opt}
+                                        <button onClick={() => handleRemoveOption(opt)} className="chip-remove">×</button>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Criteria List */}
+                        <div>
+                            <h4 style={{ fontSize: '0.85rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '0.75rem' }}>
+                                Criteria
+                            </h4>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                {criteria.length === 0 && <span style={{ fontSize: '0.85rem', color: 'hsl(var(--foreground) / 0.4)', fontStyle: 'italic' }}>None yet</span>}
+                                {criteria.map((crit, i) => (
+                                    <div key={i} className="chip chip-secondary">
+                                        {crit}
+                                        <button onClick={() => handleRemoveCriterion(crit)} className="chip-remove">×</button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
-                    {/* Criteria Section */}
-                    <div className="card" style={{ marginBottom: '1.5rem' }}>
-                        <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span style={{ fontSize: '1.25rem' }}>⚖️</span> Criteria to Consider
-                        </h3>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-                            {extractedCriteria.map((criterion) => (
-                                <div
-                                    key={criterion}
-                                    onClick={() => setSelectedCriteria(prev => ({ ...prev, [criterion]: !prev[criterion] }))}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.75rem',
-                                        padding: '0.75rem 1rem',
-                                        borderRadius: '20px',
-                                        background: selectedCriteria[criterion]
-                                            ? 'linear-gradient(135deg, hsl(var(--primary) / 0.15), hsl(280 70% 60% / 0.1))'
-                                            : 'hsl(var(--foreground) / 0.05)',
-                                        border: selectedCriteria[criterion]
-                                            ? '2px solid hsl(var(--primary) / 0.5)'
-                                            : '2px solid transparent',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s ease',
-                                        opacity: selectedCriteria[criterion] ? 1 : 0.5
-                                    }}
-                                >
-                                    <span style={{
-                                        width: '20px',
-                                        height: '20px',
-                                        borderRadius: '50%',
-                                        background: selectedCriteria[criterion]
-                                            ? 'linear-gradient(90deg, hsl(var(--primary)), #a855f7)'
-                                            : 'hsl(var(--foreground) / 0.2)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        color: 'white',
-                                        fontSize: '0.75rem'
-                                    }}>
-                                        {selectedCriteria[criterion] && '✓'}
-                                    </span>
-                                    <span style={{ fontWeight: '500' }}>{criterion}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                    <div style={{ paddingTop: '1rem', borderTop: '1px solid hsl(var(--border))' }}>
+                        {!canSubmit ? (
+                            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '1rem', padding: '0.75rem', background: 'hsl(var(--foreground) / 0.05)', borderRadius: '0.5rem' }}>
+                                <strong>Missing info:</strong>
+                                <ul style={{ marginLeft: '1.25rem', marginTop: '0.25rem', listStyleType: 'disc' }}>
+                                    {options.length < 2 && <li>At least 2 options</li>}
+                                    {criteria.length < 1 && <li>At least 1 criterion</li>}
+                                </ul>
+                            </div>
+                        ) : null}
 
-                    {/* Action Buttons */}
-                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '2rem' }}>
                         <button
-                            onClick={() => {
-                                setVerificationMode(false);
-                                setExtractedOptions([]);
-                                setExtractedCriteria([]);
-                            }}
-                            className="btn btn-secondary"
+                            onClick={handleInitialSubmit}
+                            className="btn btn-primary w-full"
+                            disabled={!canSubmit}
+                            style={{ padding: '0.75rem' }}
                         >
-                            ← Edit Description
-                        </button>
-                        <button
-                            onClick={() => {
-                                const finalOptions = extractedOptions.filter(opt => selectedOptions[opt]);
-                                const finalCriteria = extractedCriteria.filter(crit => selectedCriteria[crit]);
-                                onNext({ options: finalOptions, criteria: finalCriteria }, description);
-                            }}
-                            className="btn btn-primary btn-lg"
-                            disabled={Object.values(selectedOptions).filter(Boolean).length < 2 || Object.values(selectedCriteria).filter(Boolean).length < 1}
-                            title={Object.values(selectedOptions).filter(Boolean).length < 2
-                                ? "Please select at least 2 options"
-                                : Object.values(selectedCriteria).filter(Boolean).length < 1
-                                    ? "Please select at least 1 criterion"
-                                    : "Proceed to prioritization"}
-                        >
-                            Continue to Prioritization →
+                            Continue →
                         </button>
                     </div>
                 </div>
-            ) : (
-                /* Chat Interface */
-                <div className="max-w-2xl mx-auto">
-                    <div className="card" style={{ minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ flex: 1, overflowY: 'auto', marginBottom: '1rem', paddingRight: '0.5rem' }}>
-                            {messages.map((msg, idx) => (
-                                <div
-                                    key={idx}
-                                    style={{
-                                        display: 'flex',
-                                        justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                                        marginBottom: '1rem'
-                                    }}
-                                >
-                                    <div style={{
-                                        maxWidth: '80%',
-                                        padding: '1rem',
-                                        borderRadius: '1rem',
-                                        background: msg.role === 'user' ? 'hsl(var(--primary))' : 'hsl(var(--background))',
-                                        color: msg.role === 'user' ? 'white' : 'hsl(var(--foreground))',
-                                        borderBottomRightRadius: msg.role === 'user' ? '0.25rem' : '1rem',
-                                        borderBottomLeftRadius: msg.role === 'assistant' ? '0.25rem' : '1rem'
-                                    }}>
-                                        {msg.text}
-                                    </div>
+
+                {/* Right Panel: Chat Interface */}
+                <div className="card md:col-span-2" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 0, overflow: 'hidden' }}>
+
+                    {/* Chat History */}
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {messages.map((msg, idx) => (
+                            <div key={idx} className={`chat-message ${msg.role}`}>
+                                <div className="message-bubble">
+                                    {msg.text}
                                 </div>
-                            ))}
-
-                            {/* Suggestion Approval UI */}
-                            {suggestions && (
-                                <div className="fade-in" style={{ marginTop: '1rem', padding: '1.5rem', background: 'hsl(var(--card))', borderRadius: '1rem', border: '1px solid hsl(var(--border))' }}>
-                                    <h4 style={{ marginBottom: '1rem', fontWeight: '600', fontSize: '1.1rem' }}>Review and edit these elements:</h4>
-
-                                    {/* Options Chips */}
-                                    <div style={{ marginBottom: '1.5rem' }}>
-                                        <div style={{ fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem', color: 'hsl(var(--foreground) / 0.7)' }}>Options:</div>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                            {suggestions.options.map((option, idx) => (
-                                                <div
-                                                    key={idx}
-                                                    style={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.5rem',
-                                                        padding: '0.5rem 0.75rem',
-                                                        background: 'linear-gradient(135deg, hsl(var(--primary) / 0.1), hsl(270 83% 53% / 0.1))',
-                                                        border: '1px solid hsl(var(--primary) / 0.3)',
-                                                        borderRadius: '9999px',
-                                                        fontSize: '0.9rem',
-                                                        fontWeight: '500'
-                                                    }}
-                                                >
-                                                    <span>{option}</span>
-                                                    <button
-                                                        onClick={() => removeOption(option)}
-                                                        style={{
-                                                            background: 'none',
-                                                            border: 'none',
-                                                            cursor: 'pointer',
-                                                            padding: '0',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            width: '18px',
-                                                            height: '18px',
-                                                            borderRadius: '50%',
-                                                            color: 'hsl(var(--foreground) / 0.6)',
-                                                            transition: 'all 0.2s'
-                                                        }}
-                                                        onMouseEnter={(e) => {
-                                                            e.currentTarget.style.background = 'hsl(var(--foreground) / 0.1)';
-                                                            e.currentTarget.style.color = 'hsl(var(--foreground))';
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            e.currentTarget.style.background = 'none';
-                                                            e.currentTarget.style.color = 'hsl(var(--foreground) / 0.6)';
-                                                        }}
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Criteria Chips */}
-                                    <div style={{ marginBottom: '1.5rem' }}>
-                                        <div style={{ fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem', color: 'hsl(var(--foreground) / 0.7)' }}>Criteria:</div>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                            {suggestions.criteria.map((criterion, idx) => (
-                                                <div
-                                                    key={idx}
-                                                    style={{
-                                                        display: 'inline-flex',
-                                                        alignItems: 'center',
-                                                        gap: '0.5rem',
-                                                        padding: '0.5rem 0.75rem',
-                                                        background: 'linear-gradient(135deg, hsl(var(--primary) / 0.1), hsl(270 83% 53% / 0.1))',
-                                                        border: '1px solid hsl(var(--primary) / 0.3)',
-                                                        borderRadius: '9999px',
-                                                        fontSize: '0.9rem',
-                                                        fontWeight: '500'
-                                                    }}
-                                                >
-                                                    <span>{criterion}</span>
-                                                    <button
-                                                        onClick={() => removeCriterion(criterion)}
-                                                        style={{
-                                                            background: 'none',
-                                                            border: 'none',
-                                                            cursor: 'pointer',
-                                                            padding: '0',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            justifyContent: 'center',
-                                                            width: '18px',
-                                                            height: '18px',
-                                                            borderRadius: '50%',
-                                                            color: 'hsl(var(--foreground) / 0.6)',
-                                                            transition: 'all 0.2s'
-                                                        }}
-                                                        onMouseEnter={(e) => {
-                                                            e.currentTarget.style.background = 'hsl(var(--foreground) / 0.1)';
-                                                            e.currentTarget.style.color = 'hsl(var(--foreground))';
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            e.currentTarget.style.background = 'none';
-                                                            e.currentTarget.style.color = 'hsl(var(--foreground) / 0.6)';
-                                                        }}
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Removed Items Section */}
-                                    {(removedItems.options.length > 0 || removedItems.criteria.length > 0) && (
-                                        <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'hsl(var(--foreground) / 0.03)', borderRadius: '0.5rem', border: '1px dashed hsl(var(--border))' }}>
-                                            <div style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.75rem', color: 'hsl(var(--foreground) / 0.5)' }}>
-                                                🗑️ Removed (click to restore):
-                                            </div>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                                {removedItems.options.map((option, idx) => (
-                                                    <button
-                                                        key={`removed-opt-${idx}`}
-                                                        onClick={() => restoreOption(option)}
-                                                        style={{
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '0.35rem',
-                                                            padding: '0.4rem 0.65rem',
-                                                            background: 'transparent',
-                                                            border: '1px dashed hsl(var(--foreground) / 0.3)',
-                                                            borderRadius: '9999px',
-                                                            fontSize: '0.85rem',
-                                                            color: 'hsl(var(--foreground) / 0.5)',
-                                                            cursor: 'pointer',
-                                                            transition: 'all 0.2s'
-                                                        }}
-                                                        onMouseEnter={(e) => {
-                                                            e.currentTarget.style.background = 'hsl(var(--foreground) / 0.05)';
-                                                            e.currentTarget.style.color = 'hsl(var(--foreground))';
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            e.currentTarget.style.background = 'transparent';
-                                                            e.currentTarget.style.color = 'hsl(var(--foreground) / 0.5)';
-                                                        }}
-                                                    >
-                                                        ↺ {option}
-                                                    </button>
-                                                ))}
-                                                {removedItems.criteria.map((criterion, idx) => (
-                                                    <button
-                                                        key={`removed-crit-${idx}`}
-                                                        onClick={() => restoreCriterion(criterion)}
-                                                        style={{
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '0.35rem',
-                                                            padding: '0.4rem 0.65rem',
-                                                            background: 'transparent',
-                                                            border: '1px dashed hsl(var(--foreground) / 0.3)',
-                                                            borderRadius: '9999px',
-                                                            fontSize: '0.85rem',
-                                                            color: 'hsl(var(--foreground) / 0.5)',
-                                                            cursor: 'pointer',
-                                                            transition: 'all 0.2s'
-                                                        }}
-                                                        onMouseEnter={(e) => {
-                                                            e.currentTarget.style.background = 'hsl(var(--foreground) / 0.05)';
-                                                            e.currentTarget.style.color = 'hsl(var(--foreground))';
-                                                        }}
-                                                        onMouseLeave={(e) => {
-                                                            e.currentTarget.style.background = 'transparent';
-                                                            e.currentTarget.style.color = 'hsl(var(--foreground) / 0.5)';
-                                                        }}
-                                                    >
-                                                        ↺ {criterion}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <button
-                                        onClick={() => onNext(suggestions, description)}
-                                        className="btn btn-primary"
-                                        disabled={suggestions.options.length < 2 || suggestions.criteria.length === 0}
-                                        title={suggestions.options.length < 2
-                                            ? "Add at least 2 options to compare"
-                                            : suggestions.criteria.length === 0
-                                                ? "Add at least 1 criterion to proceed"
-                                                : "Continue to prioritize criteria"}
-                                        style={{
-                                            width: '100%',
-                                            opacity: (suggestions.options.length < 2 || suggestions.criteria.length === 0) ? 0.5 : 1
-                                        }}
-                                    >
-                                        Proceed with these →
-                                    </button>
+                            </div>
+                        ))}
+                        {isTyping && (
+                            <div className="chat-message assistant">
+                                <div className="message-bubble typing-indicator">
+                                    <span>•</span><span>•</span><span>•</span>
                                 </div>
-                            )}
-                            <div ref={messagesEndRef} />
-                        </div>
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
 
-                        {/* Chat Input - ALWAYS visible */}
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    {/* Chat Input */}
+                    <div style={{ padding: '1rem', borderTop: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}>
+                        <div style={{ display: 'flex', gap: '0.75rem' }}>
                             <input
                                 type="text"
                                 className="input"
                                 value={chatInput}
                                 onChange={(e) => setChatInput(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleChatSubmit()}
-                                placeholder={suggestions ? "Need changes? Keep chatting..." : "Type your reply..."}
+                                placeholder="Type your message..."
+                                style={{ flex: 1 }}
                                 autoFocus
                             />
                             <button
                                 onClick={handleChatSubmit}
                                 className="btn btn-primary"
-                                title="Send message"
+                                disabled={!chatInput.trim() || isTyping}
                             >
-                                Send
-                            </button>
-                            <button
-                                onClick={restartChat}
-                                className="btn btn-secondary"
-                                title="Start over from beginning"
-                            >
-                                ↺
+                                <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>↑</span>
                             </button>
                         </div>
                     </div>
                 </div>
+
+            </div>
+
+            {/* Confirmation Modal */}
+            {showConfirmation && (
+                <div className="modal-overlay">
+                    <div className="modal-content animate-in">
+                        {validationResult?.isValid === false ? (
+                            <>
+                                <h2 style={{ fontSize: '1.4rem', fontWeight: '600', marginBottom: '1rem', color: 'hsl(var(--destructive, 0 84% 60%))' }}>
+                                    ⚠️ Logic Check
+                                </h2>
+                                <p style={{ marginBottom: '1rem', fontSize: '1rem', lineHeight: '1.5' }}>
+                                    {validationResult.warning || "Some criteria might be awkward to rate for certain options."}
+                                </p>
+
+                                {validationResult.suggestions?.length > 0 && (
+                                    <div style={{ background: 'hsl(var(--muted))', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: '600', marginBottom: '0.5rem' }}>Suggestion:</div>
+                                        <p style={{ fontSize: '0.95rem' }}>Consider renaming criteria to apply to <em>all</em> options:</p>
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                                            {validationResult.suggestions.map(s => (
+                                                <span key={s} className="chip chip-secondary" style={{ background: 'hsl(var(--background))' }}>{s}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                                    <button
+                                        onClick={() => setShowConfirmation(false)}
+                                        className="btn btn-primary"
+                                    >
+                                        Fix in Chat
+                                    </button>
+                                    <button
+                                        onClick={confirmAndProceed}
+                                        className="btn btn-secondary"
+                                        style={{ fontSize: '0.9rem' }}
+                                    >
+                                        Ignore & Proceed
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1rem' }}>Ready to prioritize?</h2>
+
+                                <div style={{ marginBottom: '1.5rem' }}>
+                                    <p style={{ marginBottom: '0.5rem', color: 'hsl(var(--foreground) / 0.8)' }}>You are comparing:</p>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+                                        {options.map(o => <span key={o} className="chip">{o}</span>)}
+                                    </div>
+
+                                    <p style={{ marginBottom: '0.5rem', color: 'hsl(var(--foreground) / 0.8)' }}>Based on these factors:</p>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        {criteria.map(c => <span key={c} className="chip chip-secondary">{c}</span>)}
+                                    </div>
+                                </div>
+
+                                {criteria.length === 1 && (
+                                    <div className="notice-box" style={{ marginBottom: '1.5rem' }}>
+                                        <p>ℹ️ You only have one criterion. A decision matrix works best with multiple competing factors. Want to ask the AI for more factors to consider?</p>
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                                    <button
+                                        onClick={() => setShowConfirmation(false)}
+                                        className="btn btn-secondary"
+                                    >
+                                        Back to Chat
+                                    </button>
+                                    <button
+                                        onClick={confirmAndProceed}
+                                        className="btn btn-primary"
+                                    >
+                                        {criteria.length === 1 ? "Proceed Anyway" : "Yes, Let's Go"}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
             )}
+
+            <style jsx>{`
+                .chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    padding: 0.35rem 0.75rem;
+                    background: hsl(var(--primary) / 0.1);
+                    color: hsl(var(--primary));
+                    border-radius: 999px;
+                    font-size: 0.85rem;
+                    font-weight: 500;
+                    border: 1px solid hsl(var(--primary) / 0.2);
+                }
+                .chip-secondary {
+                    background: hsl(280 70% 60% / 0.1);
+                    color: hsl(280 70% 60%);
+                    border: 1px solid hsl(280 70% 60% / 0.2);
+                }
+                .chip-remove {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    font-size: 1rem;
+                    opacity: 0.5;
+                    padding: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 14px;
+                    height: 14px;
+                    line-height: 1;
+                    transition: opacity 0.2s;
+                }
+                .chip-remove:hover {
+                    opacity: 1;
+                }
+                .chat-message {
+                    display: flex;
+                    margin-bottom: 0.5rem;
+                }
+                .chat-message.user {
+                    justify-content: flex-end;
+                }
+                .chat-message.assistant {
+                    justify-content: flex-start;
+                }
+                .message-bubble {
+                    max-width: 85%;
+                    padding: 0.85rem 1.15rem;
+                    border-radius: 1.25rem;
+                    font-size: 0.95rem;
+                    line-height: 1.5;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                }
+                .user .message-bubble {
+                    background: hsl(var(--primary));
+                    color: white;
+                    border-bottom-right-radius: 0.25rem;
+                }
+                .assistant .message-bubble {
+                    background: hsl(var(--card));
+                    border: 1px solid hsl(var(--border));
+                    color: hsl(var(--foreground));
+                    border-bottom-left-radius: 0.25rem;
+                }
+                .typing-indicator span {
+                    animation: blink 1.4s infinite both;
+                    margin: 0 1px;
+                    font-size: 1.5rem;
+                    line-height: 0.5rem;
+                }
+                .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+                .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+                @keyframes blink {
+                    0% { opacity: 0.2; }
+                    20% { opacity: 1; }
+                    100% { opacity: 0.2; }
+                }
+                .modal-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.6);
+                    backdrop-filter: blur(4px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 50;
+                    padding: 1rem;
+                }
+                .modal-content {
+                    background: hsl(var(--card));
+                    padding: 2rem;
+                    border-radius: 1rem;
+                    max-width: 500px;
+                    width: 100%;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                    border: 1px solid hsl(var(--border));
+                }
+                .notice-box {
+                    background: hsl(40 100% 50% / 0.1);
+                    border: 1px solid hsl(40 100% 50% / 0.3);
+                    color: hsl(40 100% 30%);
+                    padding: 0.75rem;
+                    border-radius: 0.5rem;
+                    font-size: 0.9rem;
+                }
+                .w-full { width: 100%; }
+                .grid { display: grid; }
+                .gap-6 { gap: 1.5rem; }
+                @media (min-width: 768px) {
+                    .md\:grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+                    .md\:col-span-1 { grid-column: span 1; }
+                    .md\:col-span-2 { grid-column: span 2; }
+                }
+            `}</style>
         </div>
     );
 }

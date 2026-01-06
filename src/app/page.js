@@ -4,7 +4,6 @@ import InputPhase from '@/components/InputPhase';
 import CriteriaPhase from '@/components/CriteriaPhase';
 import RatingPhase from '@/components/RatingPhase';
 import ExplanationView from '@/components/ExplanationView';
-import EditOptionsPhase from '@/components/EditOptionsPhase';
 
 export default function Home() {
     // Phases: input, criteria, rating, explanation, editOptions
@@ -97,7 +96,7 @@ export default function Home() {
         <main style={{ minHeight: '100vh', padding: '2rem', background: 'hsl(var(--background))' }}>
             <div className="container">
                 {/* Progress Indicator */}
-                {phase !== 'input' && phase !== 'editOptions' && (
+                {phase !== 'input' && (
                     <div className="progress-container">
                         {[0, 1, 2, 3].map((idx) => (
                             <div
@@ -109,7 +108,7 @@ export default function Home() {
                 )}
 
                 {/* Header with Logo (except on input page) */}
-                {phase !== 'input' && phase !== 'editOptions' && (
+                {phase !== 'input' && (
                     <header style={{ textAlign: 'center', marginBottom: '2rem' }}>
                         <div className="logo" style={{ fontSize: '2rem' }}>DilemmaWise</div>
                     </header>
@@ -118,15 +117,6 @@ export default function Home() {
                 {/* Phase Content */}
                 {phase === 'input' && (
                     <InputPhase onNext={handleExtraction} savedDescription={savedDescription} />
-                )}
-
-                {phase === 'editOptions' && (
-                    <EditOptionsPhase
-                        currentOptions={data.options}
-                        currentCriteria={data.criteria}
-                        onNext={handleEditComplete}
-                        onCancel={() => setPhase('explanation')}
-                    />
                 )}
 
                 {phase === 'criteria' && (
