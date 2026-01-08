@@ -9,19 +9,25 @@ const RobotIcon = () => (
     </svg>
 );
 
-export default function InputPhase({ onNext, savedDescription }) {
+export default function InputPhase({ onNext, savedDescription, initialOptions = [], initialCriteria = [] }) {
     // Core State
-    const [options, setOptions] = useState([]);
-    const [criteria, setCriteria] = useState([]);
+    const [options, setOptions] = useState(initialOptions);
+    const [criteria, setCriteria] = useState(initialCriteria);
     const [showConfirmation, setShowConfirmation] = useState(false);
 
     // Chat State
-    const [messages, setMessages] = useState([
-        {
+    const [messages, setMessages] = useState(() => {
+        if (initialOptions.length > 0 || initialCriteria.length > 0) {
+            return [{
+                role: 'assistant',
+                text: "I'm ready to help you edit. You can add more options or criteria, or modify the existing ones."
+            }];
+        }
+        return [{
             role: 'assistant',
             text: "Hi! I'm DilemmaWise. Describe the decision you're facing, and I'll help you structure it. \n\nFor example: \"Should I move to New York or stay in London?\""
-        }
-    ]);
+        }];
+    });
     const [chatInput, setChatInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef(null);

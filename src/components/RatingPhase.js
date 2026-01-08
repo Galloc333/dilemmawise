@@ -3,12 +3,20 @@ import { useState } from 'react';
 
 export default function RatingPhase({ options, criteria, weights, onAnalyze, onBack, savedScores }) {
     // Use saved scores if provided, otherwise default to 3 (Good)
-    const [scores, setScores] = useState(
-        savedScores || options.reduce((acc, opt) => ({
-            ...acc,
-            [opt]: criteria.reduce((cAcc, c) => ({ ...cAcc, [c]: 3 }), {})
-        }), {})
-    );
+    // Initialize scores: use saved values if available, otherwise default to 3
+    const [scores, setScores] = useState(() => {
+        const initial = {};
+        options.forEach(opt => {
+            initial[opt] = {};
+            criteria.forEach(crit => {
+                // If we have a saved score for this specific option+criterion, use it
+                // Otherwise default to 3
+                const saved = savedScores?.[opt]?.[crit];
+                initial[opt][crit] = saved !== undefined ? saved : 3;
+            });
+        });
+        return initial;
+    });
 
     const handleScoreChange = (option, criterion, value) => {
         setScores(prev => ({

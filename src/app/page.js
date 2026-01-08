@@ -96,7 +96,7 @@ export default function Home() {
         <main style={{ minHeight: '100vh', padding: '2rem', background: 'hsl(var(--background))' }}>
             <div className="container">
                 {/* Progress Indicator */}
-                {phase !== 'input' && (
+                {phase !== 'input' && phase !== 'editOptions' && (
                     <div className="progress-container">
                         {[0, 1, 2, 3].map((idx) => (
                             <div
@@ -108,7 +108,7 @@ export default function Home() {
                 )}
 
                 {/* Header with Logo (except on input page) */}
-                {phase !== 'input' && (
+                {phase !== 'input' && phase !== 'editOptions' && (
                     <header style={{ textAlign: 'center', marginBottom: '2rem' }}>
                         <div className="logo" style={{ fontSize: '2rem' }}>DilemmaWise</div>
                     </header>
@@ -117,6 +117,15 @@ export default function Home() {
                 {/* Phase Content */}
                 {phase === 'input' && (
                     <InputPhase onNext={handleExtraction} savedDescription={savedDescription} />
+                )}
+
+                {phase === 'editOptions' && (
+                    <InputPhase
+                        onNext={(data) => handleEditComplete(data)}
+                        savedDescription={savedDescription}
+                        initialOptions={data.options}
+                        initialCriteria={data.criteria}
+                    />
                 )}
 
                 {phase === 'criteria' && (
