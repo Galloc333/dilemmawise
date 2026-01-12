@@ -77,7 +77,7 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
                             {hoveredCriterion === criterion && explanations[criterion] && (
                                 <div className="tooltip-custom animate-in">
                                     <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: 'hsl(var(--primary))' }}>
-                                        Why weight this High?
+                                        Why weigh this High?
                                     </div>
                                     {explanations[criterion]}
                                 </div>
