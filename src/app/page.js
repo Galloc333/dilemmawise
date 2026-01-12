@@ -3,6 +3,7 @@ import { useState } from 'react';
 import InputPhase from '@/components/InputPhase';
 import CriteriaPhase from '@/components/CriteriaPhase';
 import RatingPhase from '@/components/RatingPhase';
+import ElicitationPhase from '@/components/ElicitationPhase';
 import ExplanationView from '@/components/ExplanationView';
 
 export default function Home() {
@@ -16,6 +17,7 @@ export default function Home() {
     const [savedScores, setSavedScores] = useState(null);
     const [savedDescription, setSavedDescription] = useState('');
     const [results, setResults] = useState(null);
+    const [useElicitation, setUseElicitation] = useState(true); // Toggle for elicitation vs manual rating
 
     const handleExtraction = (extractedData, description) => {
         setData(extractedData);
@@ -68,6 +70,7 @@ export default function Home() {
         setSavedScores(null);
         setSavedDescription('');
         setResults(null);
+        setUseElicitation(true); // Reset to elicitation mode
     };
 
     const handleEditOptions = () => {
@@ -138,14 +141,25 @@ export default function Home() {
                 )}
 
                 {phase === 'rating' && (
-                    <RatingPhase
-                        options={data.options}
-                        criteria={data.criteria}
-                        weights={weights}
-                        onAnalyze={handleAnalyze}
-                        onBack={() => setPhase('criteria')}
-                        savedScores={savedScores}
-                    />
+                    useElicitation ? (
+                        <ElicitationPhase
+                            options={data.options}
+                            criteria={data.criteria}
+                            weights={weights}
+                            onAnalyze={handleAnalyze}
+                            onBack={() => setPhase('criteria')}
+                            onFallbackToManual={() => setUseElicitation(false)}
+                        />
+                    ) : (
+                        <RatingPhase
+                            options={data.options}
+                            criteria={data.criteria}
+                            weights={weights}
+                            onAnalyze={handleAnalyze}
+                            onBack={() => setPhase('criteria')}
+                            savedScores={savedScores}
+                        />
+                    )
                 )}
 
                 {phase === 'explanation' && results && (
