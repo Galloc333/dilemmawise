@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import InputPhase from '@/components/InputPhase';
 import CriteriaPhase from '@/components/CriteriaPhase';
-import RatingPhase from '@/components/RatingPhase';
+import ElicitationPhase from '@/components/ElicitationPhase';
 import ExplanationView from '@/components/ExplanationView';
 
 export default function Home() {
@@ -138,13 +138,13 @@ export default function Home() {
                 )}
 
                 {phase === 'rating' && (
-                    <RatingPhase
+                    <ElicitationPhase
                         options={data.options}
                         criteria={data.criteria}
                         weights={weights}
-                        onAnalyze={handleAnalyze}
+                        savedDescription={savedDescription}
+                        onComplete={handleAnalyze}
                         onBack={() => setPhase('criteria')}
-                        savedScores={savedScores}
                     />
                 )}
 

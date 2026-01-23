@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 // Icons
 const RobotIcon = () => (
@@ -193,8 +194,10 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                     <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         {messages.map((msg, idx) => (
                             <div key={idx} className={`chat-message ${msg.role}`}>
-                                <div className="message-bubble">
-                                    {msg.text}
+                                <div className="message-bubble md-content">
+                                    <ReactMarkdown components={{
+                                        a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />
+                                    }}>{msg.text}</ReactMarkdown>
                                 </div>
                             </div>
                         ))}

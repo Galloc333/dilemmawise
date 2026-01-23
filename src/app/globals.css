@@ -108,7 +108,6 @@ body {
 .input:focus {
     outline: none;
     border-color: hsl(var(--primary));
-    ring: 2px solid hsl(var(--primary));
 }
 
 h1,
@@ -123,6 +122,7 @@ h1 {
     margin-bottom: 1rem;
     background: linear-gradient(to right, hsl(var(--primary)), #a855f7);
     -webkit-background-clip: text;
+    background-clip: text;
     color: transparent;
 }
 
@@ -380,4 +380,94 @@ input[type="range"]::-moz-range-thumb {
 .phase-header p {
     color: hsl(var(--foreground) / 0.6);
     font-size: 1.1rem;
+}
+
+/* Spinner */
+.spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid hsl(var(--border));
+    border-top-color: hsl(var(--primary));
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Utility Classes */
+.max-w-2xl {
+    max-width: 42rem;
+}
+
+.mx-auto {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.relative {
+    position: relative;
+}
+
+/* Muted Background */
+:root {
+    --muted: 210 40% 96%;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --muted: 217 33% 20%;
+    }
+}
+
+/* Markdown Content Styling */
+.md-content {
+    word-break: break-word;
+}
+
+.md-content p {
+    margin-bottom: 0.75rem;
+}
+
+.md-content p:last-child {
+    margin-bottom: 0;
+}
+
+.md-content ul,
+.md-content ol {
+    margin-left: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.md-content li {
+    margin-bottom: 0.4rem;
+}
+
+.md-content a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+    font-weight: 500;
+    transition: opacity 0.2s;
+}
+
+.md-content a:hover {
+    opacity: 0.8;
+}
+
+.user .md-content a {
+    color: white;
+}
+
+.md-content h1,
+.md-content h2,
+.md-content h3 {
+    font-size: 1.1em;
+    margin: 1rem 0 0.5rem;
+    color: inherit;
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: border-box;
 }

@@ -1,52 +1,65 @@
-import { model } from "@/lib/gemini";
+import { model, parseJsonFromResponse } from "@/lib/gemini";
+import { performWebSearch } from "@/lib/webSearch";
 import { NextResponse } from "next/server";
 
-const CHAT_SYSTEM_PROMPT = `You are an AI decision coach helping users structure their decision-making process.
+const SEARCH_INTENT_PROMPT = `Analyze the user's latest message in the context of their decision.
+Does the user need real-world suggestions, price checks, or specific options they haven't mentioned yet?
+(e.g., "What are good laptops under $1000?", "Compare iPhone vs Samsung", "Find me a hiking trail in London").
 
-Current context:
-- Options being considered: {options}
-- Criteria identified: {criteria}
+If YES, output a search query. If NO, output null.
 
-Your Goal: Help the user define at least 2 distinct options and at least 1 criterion.
+Output JSON:
+{
+  "needsSearch": true/false,
+  "searchQuery": "specific search query" or null
+}`;
+
+const CHAT_SYSTEM_PROMPT = `You are an AI decision coach. Help the user structure their decision.
+
+STYLE RULES:
+- BE CONCISE: Use minimal filler. Get straight to the point.
+- CLEAR STRUCTURE: Use paragraphs and bulleted lists (- or 1.) for readability.
+- CLICKABLE LINKS: When sharing links, use markdown format: [Site Name](URL).
+- EMOJIS: Use subtle emojis to categorize information.
+
+Goal: Define ≥2 options and ≥1 criterion.
+Current context: {options} | {criteria}
 
 Rules:
-1. **Validation**: 
-   - If the user has < 2 options, you MUST ask them what alternatives they are considering.
-   - If the user has < 1 criterion, you MUST ask them what factors are important (e.g., cost, speed, feeling).
-   - Do NOT suggest proceeding until these conditions are met.
-
-2. **Extraction**:
-   - ACTIVELY look for options and criteria in the user's messages.
-   - If the user implies an option (e.g., "I might go to Paris"), extract it.
-
-3. **Tone**:
-   - Be warm, concise, and helpful.
-   - Don't lecture. Just guide them naturally.
-
-CRITICAL INSTRUCTION:
-You MUST end EVERY response with a JSON block containing the specific options and criteria identified in the conversation so far, including any you just found.
-The user will NOT see this JSON block, so do not worry about cluttering the chat.
-
-Format:
-\`\`\`json
-{
-  "suggestedOptions": ["Option A", "Option B"],
-  "suggestedCriteria": ["Criterion A", "Criterion B"]
-}
-\`\`\`
-If no valid options/criteria are present yet, return empty arrays.
+1. Validation: If <2 options or <1 criterion, ask specifically for the missing parts.
+2. Exploration: If search results are provided, present specific options as a bulleted list with [Title](URL) links.
+3. Extraction: Always end with the JSON block.
 `;
 
 export async function POST(request) {
     try {
         const { messages, currentOptions, currentCriteria } = await request.json();
+        const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0]?.text;
 
-        // Build the context
-        const systemPrompt = CHAT_SYSTEM_PROMPT
+        // 1. Analyze if web search is needed
+        let searchResults = null;
+        if (lastUserMessage) {
+            const intentResult = await model.generateContent([
+                { text: SEARCH_INTENT_PROMPT },
+                { text: `Current Conversation:\n${messages.slice(-3).map(m => `${m.role}: ${m.text}`).join('\n')}` }
+            ]);
+            const intent = parseJsonFromResponse(intentResult.response.text());
+
+            if (intent.needsSearch && intent.searchQuery) {
+                searchResults = await performWebSearch(intent.searchQuery);
+            }
+        }
+
+        // 2. Build the final prompt
+        let systemPrompt = CHAT_SYSTEM_PROMPT
             .replace("{options}", currentOptions?.join(", ") || "None yet")
             .replace("{criteria}", currentCriteria?.join(", ") || "None yet");
 
-        // Build conversation history for Gemini
+        if (searchResults && searchResults.length > 0) {
+            systemPrompt += `\n\nWEB SEARCH RESULTS FOR YOUR REFERENCE:\n${JSON.stringify(searchResults, null, 2)}\nUse these to provide specific suggestions with links.`;
+        }
+
+        // Build conversation parts
         const conversationParts = [
             { text: systemPrompt },
             ...messages.map(msg => ({
@@ -57,45 +70,25 @@ export async function POST(request) {
         const result = await model.generateContent(conversationParts.map(p => p.text).join("\n\n"));
         let responseText = result.response.text();
 
-        // Try to extract any suggested options or criteria from the response
+        // 3. Extract metadata and clean text
         const suggestedOptions = [];
         const suggestedCriteria = [];
 
-        // 1. Try to extract JSON block
         const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
         if (jsonMatch) {
             try {
                 const data = JSON.parse(jsonMatch[1]);
-                if (Array.isArray(data.suggestedOptions)) {
-                    suggestedOptions.push(...data.suggestedOptions);
-                }
-                if (Array.isArray(data.suggestedCriteria)) {
-                    suggestedCriteria.push(...data.suggestedCriteria);
-                }
-
-                // Remove the JSON block from the text shown to user so it looks clean
+                if (Array.isArray(data.suggestedOptions)) suggestedOptions.push(...data.suggestedOptions);
+                if (Array.isArray(data.suggestedCriteria)) suggestedCriteria.push(...data.suggestedCriteria);
                 responseText = responseText.replace(jsonMatch[0], '').trim();
-            } catch (e) {
-                console.error("Failed to parse extracted JSON:", e);
-            }
+            } catch (e) { console.error("JSON extraction error:", e); }
         }
 
-        // 2. Fallback: Simple regex pattern matching in case the LLM ignores JSON instructions
-        if (suggestedOptions.length === 0 && suggestedCriteria.length === 0) {
-            // Regex to match "adding [X] as an option/alternative"
-            // Handles both quoted and unquoted: adding 'Foo'..., adding Foo...
-            const optionMatches = [...responseText.matchAll(/adding\s+(?:["']([^"']+)["']|([^"'\s,]+))\s+as an (?:option|alternative)/gi)];
-            optionMatches.forEach(match => {
-                const val = match[1] || match[2]; // match[1] is quoted group, match[2] is unquoted group
-                if (val) suggestedOptions.push(val);
-            });
-
-            // Regex to match "consider [X] as a factor/criterion"
-            const criteriaMatches = [...responseText.matchAll(/consider\s+(?:["']([^"']+)["']|([^"'\s,]+))\s+as a (?:factor|criterion)/gi)];
-            criteriaMatches.forEach(match => {
-                const val = match[1] || match[2];
-                if (val) suggestedCriteria.push(val);
-            });
+        // Final fallback for empty response
+        if (!responseText.trim()) {
+            responseText = suggestedOptions.length > 0
+                ? "I've added those options to your list. What should we use to compare them?"
+                : "I'm listening. Tell me more about the decision you're making.";
         }
 
         return NextResponse.json({
@@ -105,9 +98,6 @@ export async function POST(request) {
         });
     } catch (error) {
         console.error("Chat API Error:", error);
-        return NextResponse.json(
-            { error: "Failed to generate response" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to generate response" }, { status: 500 });
     }
 }
