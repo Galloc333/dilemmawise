@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
 
-export default function ElicitationPhase({ options, criteria, weights, onComplete, onBack, savedDescription }) {
+export default function ElicitationPhase({ options, criteria, weights, onComplete, onBack, savedDescription, dilemma }) {
     const [stage, setStage] = useState('intro'); // intro, context, questions, complete
     const [context, setContext] = useState({});
     const [contextAnalysis, setContextAnalysis] = useState(null);
@@ -11,13 +11,24 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
     const [budget, setBudget] = useState(0);
     const [loading, setLoading] = useState(false);
     const [currentResponse, setCurrentResponse] = useState('');
+    const [currentScores, setCurrentScores] = useState({});
     const [inferredRatings, setInferredRatings] = useState(null);
     const [showWebFacts, setShowWebFacts] = useState(false);
     const chatEndRef = useRef(null);
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [responses, currentQuestionIndex]);
+
+        // Initialize currentScores when question changes
+        const currentQ = questions[currentQuestionIndex];
+        if (currentQ && currentQ.relates_to && currentQ.relates_to.options) {
+            const initial = {};
+            currentQ.relates_to.options.forEach(opt => {
+                initial[opt] = 5; // Default middle value
+            });
+            setCurrentScores(initial);
+        }
+    }, [responses, currentQuestionIndex, questions]);
 
     const analyzeContextNeeds = async () => {
         setLoading(true);
@@ -29,7 +40,8 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                     mode: 'analyze_context',
                     options,
                     criteria,
-                    description: savedDescription
+                    description: savedDescription,
+                    dilemma
                 })
             });
 
@@ -60,7 +72,9 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                     options,
                     criteria,
                     weights,
-                    context
+                    context,
+                    description: savedDescription,
+                    dilemma
                 })
             });
 
@@ -92,17 +106,16 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
     };
 
     const handleResponseSubmit = () => {
-        if (!currentResponse.trim()) return;
-
         const newResponses = [...responses, {
             questionId: questions[currentQuestionIndex].id,
             question: questions[currentQuestionIndex].text,
-            answer: currentResponse,
+            answer: JSON.stringify(currentScores), // Send as JSON string for now
+            numeric_scores: currentScores,
             relates_to: questions[currentQuestionIndex].relates_to
         }];
 
         setResponses(newResponses);
-        setCurrentResponse('');
+        setCurrentScores({});
 
         if (currentQuestionIndex < questions.length - 1) {
             setCurrentQuestionIndex(currentQuestionIndex + 1);
@@ -592,36 +605,52 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                             <div ref={chatEndRef} />
                         </div>
 
-                        {/* Input area */}
-                        <div>
-                            <textarea
-                                value={currentResponse}
-                                onChange={(e) => setCurrentResponse(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                        e.preventDefault();
-                                        handleResponseSubmit();
-                                    }
-                                }}
-                                placeholder="Type your response here... (Press Enter to submit)"
-                                rows={3}
-                                style={{
-                                    width: '100%',
-                                    padding: '0.75rem',
-                                    border: '1px solid hsl(var(--border))',
-                                    borderRadius: '0.5rem',
-                                    fontSize: '1rem',
-                                    resize: 'vertical',
-                                    marginBottom: '0.75rem'
-                                }}
-                            />
+                        {/* Input area: 1-10 Sliders */}
+                        <div style={{ padding: '1rem', background: 'hsl(var(--foreground) / 0.02)', borderRadius: '0.75rem', border: '1px solid hsl(var(--border))' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                                {currentQuestion?.relates_to?.options?.map(option => (
+                                    <div key={option} style={{ background: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                            <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>{option}</span>
+                                            <span style={{
+                                                background: 'hsl(var(--primary))',
+                                                color: 'white',
+                                                padding: '0.2rem 0.6rem',
+                                                borderRadius: '1rem',
+                                                fontSize: '0.85rem',
+                                                fontWeight: 'bold'
+                                            }}>
+                                                {currentScores[option] || 5}
+                                            </span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min="1"
+                                            max="10"
+                                            step="1"
+                                            value={currentScores[option] || 5}
+                                            onChange={(e) => setCurrentScores(prev => ({ ...prev, [option]: parseInt(e.target.value) }))}
+                                            style={{
+                                                width: '100%',
+                                                cursor: 'pointer',
+                                                accentColor: 'hsl(var(--primary))'
+                                            }}
+                                        />
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', fontSize: '0.7rem', opacity: 0.5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                            <span>Poor</span>
+                                            <span>Excellent</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
                             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                 <button
                                     onClick={handleResponseSubmit}
-                                    disabled={!currentResponse.trim()}
                                     className="btn btn-primary"
+                                    style={{ padding: '0.75rem 2rem', fontSize: '1rem' }}
                                 >
-                                    Submit Response →
+                                    Next Question →
                                 </button>
                             </div>
                         </div>
@@ -640,21 +669,6 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                 </div>
 
                 <div style={{ maxWidth: '900px', margin: '2rem auto' }}>
-                    <div className="card" style={{ marginBottom: '1.5rem' }}>
-                        <h3 style={{ marginBottom: '1rem' }}>Inferred Ratings</h3>
-                        <p style={{ opacity: 0.8, marginBottom: '1.5rem', fontSize: '0.95rem' }}>
-                            {inferredRatings?.reasoning}
-                        </p>
-                        <div style={{
-                            padding: '1rem',
-                            background: 'hsl(var(--muted))',
-                            borderRadius: '0.5rem',
-                            fontSize: '0.9rem'
-                        }}>
-                            <strong>Confidence:</strong> {Math.round((inferredRatings?.confidence || 0) * 100)}%
-                        </div>
-                    </div>
-
                     {/* Rating Matrix Preview */}
                     <div className="card">
                         <h3 style={{ marginBottom: '1rem' }}>Rating Matrix</h3>
@@ -679,8 +693,7 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                                 {opt}
                                             </td>
                                             {criteria.map(crit => {
-                                                const rating = inferredRatings?.ratings?.[opt]?.[crit] || 3;
-                                                const labels = ['Very Low', 'Low', 'Medium', 'High', 'Very High'];
+                                                const rating = inferredRatings?.ratings?.[opt]?.[crit] || 5;
                                                 return (
                                                     <td key={crit} style={{
                                                         textAlign: 'center',
@@ -689,12 +702,17 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                                     }}>
                                                         <div style={{
                                                             display: 'inline-block',
-                                                            padding: '0.25rem 0.75rem',
-                                                            borderRadius: '0.5rem',
-                                                            background: `hsl(var(--primary) / ${rating * 0.15})`,
-                                                            fontSize: '0.85rem'
+                                                            width: '32px',
+                                                            height: '32px',
+                                                            lineHeight: '32px',
+                                                            borderRadius: '50%',
+                                                            background: `hsl(var(--primary) / ${rating * 0.08})`,
+                                                            color: rating > 6 ? 'hsl(var(--primary))' : 'inherit',
+                                                            fontWeight: 'bold',
+                                                            fontSize: '0.9rem',
+                                                            border: `1px solid hsl(var(--primary) / ${rating * 0.1})`
                                                         }}>
-                                                            {labels[rating - 1]}
+                                                            {rating}
                                                         </div>
                                                     </td>
                                                 );

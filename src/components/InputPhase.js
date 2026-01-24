@@ -29,6 +29,7 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
         }];
     });
     const [chatInput, setChatInput] = useState('');
+    const [coreDilemma, setCoreDilemma] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef(null);
 
@@ -56,13 +57,15 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                 body: JSON.stringify({
                     messages: newMessages,
                     currentOptions: options,
-                    currentCriteria: criteria
+                    currentCriteria: criteria,
+                    currentDilemma: coreDilemma
                 })
             });
             const data = await response.json();
 
             // Add assistant response
             setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
+            if (data.coreDilemma) setCoreDilemma(data.coreDilemma);
 
             // Automatic additions disabled - user must click tags inline
         } catch (error) {
@@ -102,7 +105,7 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
 
     const confirmAndProceed = () => {
         const description = messages.filter(m => m.role === 'user').map(m => m.text).join('\n');
-        onNext({ options, criteria }, description);
+        onNext({ options, criteria }, description, coreDilemma);
     };
 
     return (

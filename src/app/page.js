@@ -14,12 +14,14 @@ export default function Home() {
     });
     const [weights, setWeights] = useState({});
     const [savedScores, setSavedScores] = useState(null);
+    const [dilemma, setDilemma] = useState('');
     const [savedDescription, setSavedDescription] = useState('');
     const [results, setResults] = useState(null);
 
-    const handleExtraction = (extractedData, description) => {
+    const handleExtraction = (extractedData, description, coreDilemma) => {
         setData(extractedData);
         if (description) setSavedDescription(description);
+        if (coreDilemma) setDilemma(coreDilemma);
         setPhase('criteria');
     };
 
@@ -29,30 +31,26 @@ export default function Home() {
     };
 
     const handleAnalyze = ({ weights: w, scores }) => {
-        // Deterministic WSM Algorithm
+        // Deterministic WSM Algorithm (Raw Weighted Sum)
         const calculatedScores = data.options.map(opt => {
-            let totalScore = 0;
-            let totalWeight = 0;
+            let weightedSum = 0;
 
             data.criteria.forEach(crit => {
-                const weight = w[crit];
-                const score = scores[opt][crit];
-                totalScore += score * weight;
-                totalWeight += weight;
+                const weight = w[crit] || 1;
+                const score = scores[opt][crit] || 0;
+                weightedSum += score * weight;
             });
 
             return {
                 option: opt,
-                score: totalScore
+                score: weightedSum
             };
         });
 
         // Sort by score descending
         calculatedScores.sort((a, b) => b.score - a.score);
 
-        // Save scores for potential re-editing
         setSavedScores(scores);
-
         setResults({
             ranking: calculatedScores,
             weights: w,
@@ -143,6 +141,7 @@ export default function Home() {
                         criteria={data.criteria}
                         weights={weights}
                         savedDescription={savedDescription}
+                        dilemma={dilemma}
                         onComplete={handleAnalyze}
                         onBack={() => setPhase('criteria')}
                     />

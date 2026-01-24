@@ -42,27 +42,25 @@ Respond in JSON format:
 }
 `;
 
-const NO_TIE_INSTRUCTIONS = `1. "Why it won" - A structured, easy-to-read explanation with these sections:
-   • Start with a warm one-sentence summary of why this option came out on top
-   • "Your Top Priorities:" - List the 2-3 criteria you weighted highest and explain how the winner performed on each (use natural language, not raw numbers)
-   • "Key Advantages:" - What made this option stand out compared to the alternatives? Be specific about which criteria gave it the edge
-   • Keep the tone conversational and supportive, like a helpful advisor
+const NO_TIE_INSTRUCTIONS = `1. "whyItWon" - A beautifully structured, spaced-out explanation:
+   - SUMMARY: One bold sentence.
+   - [Double Newline]
+   - YOUR TOP PRIORITIES: Explain how it met your top 2-3 weights.
+   - [Double Newline]
+   - KEY ADVANTAGES: Explain why it beat the others.
+   - USE SECOND PERSON (You/Your). Use double newlines for spacing.
 
-2. "What could change" - A sensitivity analysis explanation:
-   • Identify which criterion, if you valued it more, could change the outcome
-   • Explain this as a "what if" scenario in simple terms
-   • Keep it thought-provoking but not prescriptive`;
+2. "whatCouldChange" - One key trade-off that could flip the result.`;
 
-const TIE_INSTRUCTIONS = `1. "Why they tied" - A structured explanation of why these options scored equally:
-   • Start with a warm acknowledgment that this is a close decision with equally strong options
-   • Explain how the tied options performed similarly across the user's priorities
-   • Highlight any differences in individual criteria (e.g., "Option A excelled in X while Option B excelled in Y, but these balanced out")
-   • Keep the tone supportive and reassure the user that both are valid choices
+const TIE_INSTRUCTIONS = `1. "whyItWon" - Explain why they tied:
+   - SUMMARY: Acknowledge the tie.
+   - [Double Newline]
+   - BALANCE: Explain how priorities balanced out.
+   - [Double Newline]
+   - DIFFERENCES: Strength of each.
+   - Use double newlines for spacing.
 
-2. "What could change" - How to break the tie:
-   • Suggest adjusting specific criteria weights to differentiate the options
-   • Or suggest re-evaluating ratings if the user feels one option is actually better on certain criteria
-   • Encourage the user to reflect on which trade-offs matter most to them`;
+2. "whatCouldChange" - How to break the tie.`;
 
 export async function POST(request) {
     try {

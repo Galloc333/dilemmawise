@@ -4,7 +4,7 @@ import { useState } from 'react';
 export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }) {
     // Use saved weights if provided, otherwise default to 3 (Medium)
     const [weights, setWeights] = useState(
-        criteria.reduce((acc, c) => ({ ...acc, [c]: savedWeights?.[c] ?? 3 }), {})
+        criteria.reduce((acc, c) => ({ ...acc, [c]: savedWeights?.[c] ?? 5 }), {})
     );
     const [explanations, setExplanations] = useState({});
     const [loadingExplanations, setLoadingExplanations] = useState(true);
@@ -37,8 +37,11 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
     };
 
     const getImportanceLabel = (value) => {
-        const labels = ['Very Low', 'Low', 'Medium', 'High', 'Very High'];
-        return labels[value - 1] || 'Medium';
+        if (value <= 2) return 'Very Low';
+        if (value <= 4) return 'Low';
+        if (value <= 6) return 'Medium';
+        if (value <= 8) return 'High';
+        return 'Critical';
     };
 
     return (
@@ -68,7 +71,7 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
                             <input
                                 type="range"
                                 min="1"
-                                max="5"
+                                max="10"
                                 value={weights[criterion]}
                                 onChange={(e) => handleWeightChange(criterion, e.target.value)}
                             />
