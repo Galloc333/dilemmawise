@@ -1,6 +1,5 @@
 "use client";
 import { useState, useRef, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
 
 // Icons
 const RobotIcon = () => (
@@ -65,13 +64,7 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             // Add assistant response
             setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
 
-            // Automatically add suggestions
-            if (data.suggestedOptions?.length > 0) {
-                setOptions(prev => [...new Set([...prev, ...data.suggestedOptions])]);
-            }
-            if (data.suggestedCriteria?.length > 0) {
-                setCriteria(prev => [...new Set([...prev, ...data.suggestedCriteria])]);
-            }
+            // Automatic additions disabled - user must click tags inline
         } catch (error) {
             console.error("Chat error:", error);
             setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I had trouble connecting. Please try again." }]);
@@ -91,7 +84,6 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
     const handleInitialSubmit = async () => {
         setIsValidating(true);
         try {
-            // Check for logical consistency
             const res = await fetch('/api/validate-matrix', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -101,7 +93,7 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             setValidationResult(data);
         } catch (e) {
             console.error("Validation failed", e);
-            setValidationResult({ isValid: true }); // Fallback to allow proceeding if validation fails
+            setValidationResult({ isValid: true });
         } finally {
             setIsValidating(false);
             setShowConfirmation(true);
@@ -132,7 +124,6 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                     </div>
 
                     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        {/* Options List */}
                         <div>
                             <h4 style={{ fontSize: '0.85rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '0.75rem' }}>
                                 Options
@@ -148,7 +139,6 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                             </div>
                         </div>
 
-                        {/* Criteria List */}
                         <div>
                             <h4 style={{ fontSize: '0.85rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '0.75rem' }}>
                                 Criteria
@@ -191,13 +181,56 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                 <div className="card md:col-span-2" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 0, overflow: 'hidden' }}>
 
                     {/* Chat History */}
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                         {messages.map((msg, idx) => (
                             <div key={idx} className={`chat-message ${msg.role}`}>
-                                <div className="message-bubble md-content">
-                                    <ReactMarkdown components={{
-                                        a: ({ node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />
-                                    }}>{msg.text}</ReactMarkdown>
+                                <div className="message-bubble">
+                                    {msg.text.split(/\n\n+/).map((paragraph, pIdx) => (
+                                        <p key={pIdx} style={{ marginBottom: pIdx === msg.text.split(/\n\n+/).length - 1 ? 0 : '1.2rem' }}>
+                                            {paragraph.split(/(\[[^\]]+\]\([^)]+\)|\[\[Option:[^\]]+\]\]|\[\[Criterion:[^\]]+\]\])/g).map((part, i) => {
+                                                const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+                                                if (linkMatch) {
+                                                    return (
+                                                        <a
+                                                            key={i} href={linkMatch[2]} target="_blank" rel="noopener noreferrer"
+                                                            style={{ color: msg.role === 'user' ? 'white' : 'hsl(var(--primary))', textDecoration: 'underline', fontWeight: '600' }}
+                                                        >
+                                                            {linkMatch[1]}
+                                                        </a>
+                                                    );
+                                                }
+                                                const optionMatch = part.match(/^\[\[Option:([^\]]+)\]\]$/);
+                                                if (optionMatch) {
+                                                    const name = optionMatch[1];
+                                                    const exists = options.includes(name);
+                                                    return (
+                                                        <button
+                                                            key={i}
+                                                            onClick={() => !exists && setOptions(prev => [...new Set([...prev, name])])}
+                                                            className={`interactive-tag option ${exists ? 'exists' : ''}`}
+                                                        >
+                                                            {exists ? '✓' : '＋'} {name}
+                                                        </button>
+                                                    );
+                                                }
+                                                const criterionMatch = part.match(/^\[\[Criterion:([^\]]+)\]\]$/);
+                                                if (criterionMatch) {
+                                                    const name = criterionMatch[1];
+                                                    const exists = criteria.includes(name);
+                                                    return (
+                                                        <button
+                                                            key={i}
+                                                            onClick={() => !exists && setCriteria(prev => [...new Set([...prev, name])])}
+                                                            className={`interactive-tag criterion ${exists ? 'exists' : ''}`}
+                                                        >
+                                                            {exists ? '✓' : '✨'} {name}
+                                                        </button>
+                                                    );
+                                                }
+                                                return part;
+                                            })}
+                                        </p>
+                                    ))}
                                 </div>
                             </div>
                         ))}
@@ -249,70 +282,34 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                                 <p style={{ marginBottom: '1rem', fontSize: '1rem', lineHeight: '1.5' }}>
                                     {validationResult.warning || "Some criteria might be awkward to rate for certain options."}
                                 </p>
-
-                                {validationResult.suggestions?.length > 0 && (
-                                    <div style={{ background: 'hsl(var(--muted))', padding: '1rem', borderRadius: '0.5rem', marginBottom: '1.5rem' }}>
-                                        <div style={{ fontSize: '0.9rem', fontWeight: '600', marginBottom: '0.5rem' }}>Suggestion:</div>
-                                        <p style={{ fontSize: '0.95rem' }}>Consider renaming criteria to apply to <em>all</em> options:</p>
-                                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                                            {validationResult.suggestions.map(s => (
-                                                <span key={s} className="chip chip-secondary" style={{ background: 'hsl(var(--background))' }}>{s}</span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
                                 <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                                    <button
-                                        onClick={() => setShowConfirmation(false)}
-                                        className="btn btn-primary"
-                                    >
-                                        Fix in Chat
-                                    </button>
-                                    <button
-                                        onClick={confirmAndProceed}
-                                        className="btn btn-secondary"
-                                        style={{ fontSize: '0.9rem' }}
-                                    >
-                                        Ignore & Proceed
-                                    </button>
+                                    <button onClick={() => setShowConfirmation(false)} className="btn btn-primary">Fix in Chat</button>
+                                    <button onClick={confirmAndProceed} className="btn btn-secondary" style={{ fontSize: '0.9rem' }}>Ignore & Proceed</button>
                                 </div>
                             </>
                         ) : (
                             <>
-                                <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1rem' }}>Ready to prioritize?</h2>
+                                <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem' }}>Ready to prioritize?</h2>
 
                                 <div style={{ marginBottom: '1.5rem' }}>
-                                    <p style={{ marginBottom: '0.5rem', color: 'hsl(var(--foreground) / 0.8)' }}>You are comparing:</p>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-                                        {options.map(o => <span key={o} className="chip">{o}</span>)}
+                                    <p style={{ marginBottom: '0.75rem', fontSize: '0.9rem', color: 'hsl(var(--foreground) / 0.7)', fontWeight: '500' }}>COMPARING:</p>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                                        {options.map((opt, i) => (
+                                            <span key={i} className="chip">{opt}</span>
+                                        ))}
                                     </div>
 
-                                    <p style={{ marginBottom: '0.5rem', color: 'hsl(var(--foreground) / 0.8)' }}>Based on these factors:</p>
+                                    <p style={{ marginBottom: '0.75rem', fontSize: '0.9rem', color: 'hsl(var(--foreground) / 0.7)', fontWeight: '500' }}>BASED ON:</p>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                        {criteria.map(c => <span key={c} className="chip chip-secondary">{c}</span>)}
+                                        {criteria.map((crit, i) => (
+                                            <span key={i} className="chip chip-secondary">{crit}</span>
+                                        ))}
                                     </div>
                                 </div>
 
-                                {criteria.length === 1 && (
-                                    <div className="notice-box" style={{ marginBottom: '1.5rem' }}>
-                                        <p>ℹ️ You only have one criterion. A decision matrix works best with multiple competing factors. Want to ask the AI for more factors to consider?</p>
-                                    </div>
-                                )}
-
-                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                                    <button
-                                        onClick={() => setShowConfirmation(false)}
-                                        className="btn btn-secondary"
-                                    >
-                                        Back to Chat
-                                    </button>
-                                    <button
-                                        onClick={confirmAndProceed}
-                                        className="btn btn-primary"
-                                    >
-                                        {criteria.length === 1 ? "Proceed Anyway" : "Yes, Let's Go"}
-                                    </button>
+                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '2rem' }}>
+                                    <button onClick={() => setShowConfirmation(false)} className="btn btn-secondary">Back to Chat</button>
+                                    <button onClick={confirmAndProceed} className="btn btn-primary">Yes, Let's Go</button>
                                 </div>
                             </>
                         )}
@@ -321,122 +318,35 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             )}
 
             <style jsx>{`
-                .chip {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    padding: 0.35rem 0.75rem;
-                    background: hsl(var(--primary) / 0.1);
-                    color: hsl(var(--primary));
-                    border-radius: 999px;
-                    font-size: 0.85rem;
-                    font-weight: 500;
-                    border: 1px solid hsl(var(--primary) / 0.2);
+                .chip { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); border-radius: 999px; font-size: 0.85rem; font-weight: 500; border: 1px solid hsl(var(--primary) / 0.2); }
+                .chip-secondary { background: hsl(280 70% 60% / 0.1); color: hsl(280 70% 60%); border: 1px solid hsl(280 70% 60% / 0.2); }
+                .chip-remove { background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.5; padding: 0; display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; transition: opacity 0.2s; }
+                .chip-remove:hover { opacity: 1; }
+                .chat-message { display: flex; margin-bottom: 0.5rem; }
+                .chat-message.user { justify-content: flex-end; }
+                .chat-message.assistant { justify-content: flex-start; }
+                .message-bubble { 
+                    max-width: 85%; padding: 1rem 1.25rem; border-radius: 1.25rem; font-size: 0.95rem; line-height: 1.6; 
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.05); background: hsl(var(--card)); border: 1px solid hsl(var(--border));
                 }
-                .chip-secondary {
-                    background: hsl(280 70% 60% / 0.1);
-                    color: hsl(280 70% 60%);
-                    border: 1px solid hsl(280 70% 60% / 0.2);
+                .user .message-bubble { background: hsl(var(--primary)); color: white; border-bottom-right-radius: 0.25rem; border: none; }
+                .assistant .message-bubble { border-bottom-left-radius: 0.25rem; }
+                .interactive-tag {
+                    display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; padding: 2px 8px; margin: 0 2px;
+                    font-size: 0.95em; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
+                    vertical-align: baseline;
                 }
-                .chip-remove {
-                    background: none;
-                    border: none;
-                    cursor: pointer;
-                    font-size: 1rem;
-                    opacity: 0.5;
-                    padding: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    width: 14px;
-                    height: 14px;
-                    line-height: 1;
-                    transition: opacity 0.2s;
-                }
-                .chip-remove:hover {
-                    opacity: 1;
-                }
-                .chat-message {
-                    display: flex;
-                    margin-bottom: 0.5rem;
-                }
-                .chat-message.user {
-                    justify-content: flex-end;
-                }
-                .chat-message.assistant {
-                    justify-content: flex-start;
-                }
-                .message-bubble {
-                    max-width: 85%;
-                    padding: 0.85rem 1.15rem;
-                    border-radius: 1.25rem;
-                    font-size: 0.95rem;
-                    line-height: 1.5;
-                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-                }
-                .user .message-bubble {
-                    background: hsl(var(--primary));
-                    color: white;
-                    border-bottom-right-radius: 0.25rem;
-                }
-                .assistant .message-bubble {
-                    background: hsl(var(--card));
-                    border: 1px solid hsl(var(--border));
-                    color: hsl(var(--foreground));
-                    border-bottom-left-radius: 0.25rem;
-                }
-                .typing-indicator span {
-                    animation: blink 1.4s infinite both;
-                    margin: 0 1px;
-                    font-size: 1.5rem;
-                    line-height: 0.5rem;
-                }
+                .interactive-tag.option { background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); border-color: hsl(var(--primary) / 0.2); }
+                .interactive-tag.criterion { background: hsl(var(--secondary) / 0.1); color: hsl(var(--secondary)); border-color: hsl(var(--secondary) / 0.2); }
+                .interactive-tag.exists { background: hsl(var(--muted)); color: hsl(var(--foreground) / 0.4); border-color: hsl(var(--border)); cursor: default; }
+                .typing-indicator span { animation: blink 1.4s infinite both; margin: 0 1px; font-size: 1.5rem; }
                 .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
                 .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-                @keyframes blink {
-                    0% { opacity: 0.2; }
-                    20% { opacity: 1; }
-                    100% { opacity: 0.2; }
-                }
-                .modal-overlay {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0, 0, 0, 0.6);
-                    backdrop-filter: blur(4px);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 50;
-                    padding: 1rem;
-                }
-                .modal-content {
-                    background: hsl(var(--card));
-                    padding: 2rem;
-                    border-radius: 1rem;
-                    max-width: 500px;
-                    width: 100%;
-                    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                    border: 1px solid hsl(var(--border));
-                }
-                .notice-box {
-                    background: hsl(40 100% 50% / 0.1);
-                    border: 1px solid hsl(40 100% 50% / 0.3);
-                    color: hsl(40 100% 30%);
-                    padding: 0.75rem;
-                    border-radius: 0.5rem;
-                    font-size: 0.9rem;
-                }
-                .w-full { width: 100%; }
+                @keyframes blink { 0% { opacity: 0.2; } 20% { opacity: 1; } 100% { opacity: 0.2; } }
+                .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
+                .modal-content { background: hsl(var(--card)); padding: 2rem; border-radius: 1rem; max-width: 500px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.1); border: 1px solid hsl(var(--border)); }
                 .grid { display: grid; }
-                .gap-6 { gap: 1.5rem; }
-                @media (min-width: 768px) {
-                    .md\:grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
-                    .md\:col-span-1 { grid-column: span 1; }
-                    .md\:col-span-2 { grid-column: span 2; }
-                }
+                @media (min-width: 768px) { .md\:grid-cols-3 { grid-template-columns: repeat(3, 1fr); } .md\:col-span-1 { grid-column: span 1; } .md\:col-span-2 { grid-column: span 2; } }
             `}</style>
         </div>
     );
