@@ -1,16 +1,29 @@
 "use client";
 import { useState, useRef, useEffect } from 'react';
 
-export default function ExplanationView({ results, onReset, onBackToRating, onEditOptions }) {
+export default function ExplanationView({ results, userContext = {}, dilemma, options: optionsProp, criteria: criteriaProp, onReset, onBackToRating, onEditOptions }) {
     const { scores, weights, ranking } = results;
-    const criteria = Object.keys(weights);
-    const options = ranking.map(r => r.option);
+    const criteriaKeys = Object.keys(weights);
+    const optionNames = ranking.map(r => r.option);
+    
+    // Use props if available, otherwise derive from results
+    const options = optionsProp || optionNames;
+    const criteria = criteriaProp || criteriaKeys;
 
     // Theoretical max possible score for bar scale
-    const sumWeights = criteria.reduce((sum, c) => sum + weights[c], 0);
+    const sumWeights = criteriaKeys.reduce((sum, c) => sum + weights[c], 0);
     const maxPossibleScore = sumWeights * 10;
 
-    const [whyItWon, setWhyItWon] = useState('');
+    // Part A: Data-driven analysis
+    const [dataAnalysis, setDataAnalysis] = useState('');
+    const [whatCouldChange, setWhatCouldChange] = useState('');
+    
+    // Part B: Personal recommendation
+    const [personalRecommendation, setPersonalRecommendation] = useState('');
+    const [recommendedOption, setRecommendedOption] = useState('');
+    const [agreesWithData, setAgreesWithData] = useState(true);
+    const [hasUserContext, setHasUserContext] = useState(false);
+    
     const [isLoadingExplanation, setIsLoadingExplanation] = useState(true);
     const [showDetails, setShowDetails] = useState(false);
 
@@ -25,14 +38,27 @@ export default function ExplanationView({ results, onReset, onBackToRating, onEd
                         winner: ranking[0],
                         ranking,
                         weights,
-                        scores
+                        scores,
+                        userContext,
+                        dilemma,
+                        options: optionsProp || optionNames
                     })
                 });
                 const data = await response.json();
-                setWhyItWon(data.whyItWon);
+                
+                // Part A
+                setDataAnalysis(data.dataAnalysis || data.whyItWon || '');
+                setWhatCouldChange(data.whatCouldChange || '');
+                
+                // Part B
+                setPersonalRecommendation(data.personalRecommendation || '');
+                setRecommendedOption(data.recommendedOption || ranking[0].option);
+                setAgreesWithData(data.agreesWithData !== false);
+                setHasUserContext(data.hasUserContext || false);
+                
             } catch (error) {
                 console.error('Explanation error:', error);
-                setWhyItWon(`${ranking[0].option} ranked highest based on your weighted criteria priorities.`);
+                setDataAnalysis(`${ranking[0].option} ranked highest based on your weighted criteria priorities.`);
             } finally {
                 setIsLoadingExplanation(false);
             }
@@ -76,22 +102,117 @@ export default function ExplanationView({ results, onReset, onBackToRating, onEd
                 </div>
             </div>
 
-            {/* 2. Insight Card */}
-            <div style={{ maxWidth: '800px', margin: '0 auto 2.5rem' }}>
+            {/* 2. Analysis Summary - Part A: Weighted Sum Analysis */}
+            <div style={{ maxWidth: '800px', margin: '0 auto 1.5rem' }}>
                 <div className="card" style={{ borderLeft: '4px solid hsl(var(--primary))', padding: '2rem' }}>
-                    <h3 style={{ fontSize: '1.25rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span>💡</span> Analysis Summary
+                    <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>📊</span> Weighted Sum Analysis
                     </h3>
-                    <div style={{
-                        color: 'hsl(var(--foreground) / 0.8)',
-                        lineHeight: '1.8',
-                        whiteSpace: 'pre-wrap',
-                        fontSize: '1.05rem'
-                    }}>
-                        {isLoadingExplanation ? 'Deep analyzing your decision map...' : whyItWon}
-                    </div>
+                    <p style={{ fontSize: '0.85rem', opacity: 0.6, marginBottom: '1.5rem', lineHeight: '1.6' }}>
+                        This is a deterministic calculation based on your numeric inputs. You provided importance weights (1-10) for each criterion and rated each option (1-10) through the questionnaire. The weighted-sum algorithm multiplies each rating by its criterion weight and sums the results to produce the final ranked outcome shown above. A detailed breakdown of this calculation is available at the bottom of this page.
+                    </p>
+                    {isLoadingExplanation ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div className="spinner" style={{ width: '24px', height: '24px' }}></div>
+                            <span style={{ opacity: 0.7 }}>Analyzing your decision data...</span>
+                        </div>
+                    ) : (
+                        <>
+                            <div style={{
+                                color: 'hsl(var(--foreground) / 0.85)',
+                                lineHeight: '1.9',
+                                whiteSpace: 'pre-wrap',
+                                fontSize: '1rem'
+                            }}>
+                                {dataAnalysis}
+                            </div>
+                            {whatCouldChange && (
+                                <div style={{
+                                    marginTop: '1.5rem',
+                                    padding: '1rem 1.25rem',
+                                    background: 'hsl(var(--foreground) / 0.03)',
+                                    borderRadius: '0.5rem',
+                                    borderLeft: '3px solid hsl(45 80% 50%)'
+                                }}>
+                                    <strong style={{ color: 'hsl(45 80% 40%)' }}>⚖️ What could change the result:</strong>
+                                    <p style={{ marginTop: '0.5rem', opacity: 0.85, lineHeight: '1.6' }}>
+                                        {whatCouldChange}
+                                    </p>
+                                </div>
+                            )}
+                        </>
+                    )}
                 </div>
             </div>
+
+            {/* 3. Analysis Summary - Part B: LLM Analysis */}
+            {!isLoadingExplanation && hasUserContext && personalRecommendation && (
+                <div style={{ maxWidth: '800px', margin: '0 auto 2.5rem' }}>
+                    <div className="card" style={{ 
+                        borderLeft: `4px solid ${agreesWithData ? 'hsl(160 60% 45%)' : 'hsl(280 60% 55%)'}`, 
+                        padding: '2rem',
+                        background: agreesWithData 
+                            ? 'linear-gradient(135deg, hsl(160 60% 98%), hsl(var(--card)))' 
+                            : 'linear-gradient(135deg, hsl(280 60% 98%), hsl(var(--card)))'
+                    }}>
+                        <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span>🎯</span> LLM Analysis (based on your preferences)
+                        </h3>
+                        <p style={{ fontSize: '0.85rem', opacity: 0.6, marginBottom: '1.5rem', lineHeight: '1.6' }}>
+                            This is a high-level interpretation by an AI language model using the free-form personal information you provided through the chat and Quick Details (budget, lifestyle preferences, constraints, and other qualitative factors). Unlike the weighted-sum calculation above, this analysis considers your broader context and may suggest a different option if it believes another choice better fits your specific situation.
+                        </p>
+                        
+                        {!agreesWithData && (
+                            <div style={{
+                                marginBottom: '1rem',
+                                padding: '0.75rem 1rem',
+                                background: 'hsl(280 60% 95%)',
+                                borderRadius: '0.5rem',
+                                fontSize: '0.9rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem'
+                            }}>
+                                <span>💡</span>
+                                <span>
+                                    <strong>Note:</strong> Based on your personal context, I have a different recommendation than the pure data suggests.
+                                </span>
+                            </div>
+                        )}
+                        
+                        <div style={{
+                            color: 'hsl(var(--foreground) / 0.85)',
+                            lineHeight: '1.9',
+                            whiteSpace: 'pre-wrap',
+                            fontSize: '1rem'
+                        }}>
+                            {personalRecommendation}
+                        </div>
+                        
+                        {recommendedOption && recommendedOption !== ranking[0].option && (
+                            <div style={{
+                                marginTop: '1rem',
+                                padding: '0.75rem 1rem',
+                                background: 'hsl(280 60% 55% / 0.1)',
+                                borderRadius: '0.5rem',
+                                fontWeight: '600',
+                                color: 'hsl(280 60% 45%)'
+                            }}>
+                                🌟 My personal pick for you: <strong>{recommendedOption}</strong>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+            
+            {/* Divider if no personal context */}
+            {!isLoadingExplanation && !hasUserContext && (
+                <div style={{ maxWidth: '800px', margin: '0 auto 2.5rem', textAlign: 'center' }}>
+                    <p style={{ fontSize: '0.85rem', opacity: 0.5, fontStyle: 'italic' }}>
+                        💡 Tip: Share more personal details in Quick Details to get a personalized recommendation!
+                    </p>
+                </div>
+            )}
 
             {/* 3. Transparency & Math Details */}
             <div style={{ maxWidth: '800px', margin: '0 auto 3rem' }}>
@@ -192,8 +313,9 @@ export default function ExplanationView({ results, onReset, onBackToRating, onEd
 
             {/* Actions */}
             <div style={{ textAlign: 'center', marginTop: '4rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                <button onClick={onEditOptions} className="btn btn-secondary">✏️ Edit Decision</button>
-                <button onClick={onReset} className="btn btn-secondary">🔄 Start New</button>
+                <button onClick={onReset} className="btn btn-primary" style={{ padding: '0.75rem 2rem', fontSize: '1rem' }}>
+                    🔄 Start New Analysis
+                </button>
             </div>
         </div>
     );

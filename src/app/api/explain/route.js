@@ -1,106 +1,146 @@
-import { generateWithRetry } from "@/lib/gemini";
+import { generateWithRetry, parseJsonFromResponse } from "@/lib/gemini";
 import { NextResponse } from "next/server";
 
-const EXPLAIN_PROMPT = `You are an AI that explains decision analysis results in a clear, structured, and human-friendly way.
+// Part A: Data-driven analysis based on weights and ratings
+const DATA_ANALYSIS_PROMPT = `You are an AI that explains decision analysis results based ONLY on the mathematical data provided.
 
-CRITICAL GUIDELINES:
-- Base your explanation ONLY on the provided data below
-- Do NOT add external knowledge, assumptions, or opinions
-- Do NOT hallucinate or invent facts
-- ONLY reference the actual scores, weights, and rankings provided
-
-IMPORTANT - Translate numbers to natural language:
-- Weight 1 = "not important to you"
-- Weight 2 = "slightly important to you"
-- Weight 3 = "moderately important to you"  
-- Weight 4 = "quite important to you"
-- Weight 5 = "very important to you" / "a top priority"
-- Score 1 = "performed poorly"
-- Score 2 = "performed below average"
-- Score 3 = "performed adequately"
-- Score 4 = "performed well"
-- Score 5 = "excelled" / "performed excellently"
-
-Given the following decision analysis results:
-- Is there a tie? {hasTie}
-- Winner/Tied Options: {winner} (total score: {winnerScore})
+DATA PROVIDED:
+- Winner: {winner} (total weighted score: {winnerScore})
+- Runner-up: {runnerUp} (score: {runnerUpScore})
+- Score Gap: {scoreGap} points
 - Full Ranking: {ranking}
-- User's Criteria Weights (1-5 scale): {weights}
-- How each option scored on each criterion (1-5 scale): {scores}
+- User's Criteria Weights (1-10 scale): {weights}
+- Option Scores (1-10 scale): {scores}
 
-Generate two explanations:
+YOUR TASK: Generate a concise, data-driven explanation covering:
+1. Which option won and by how much
+2. The 2-3 highest-weighted criteria and how the winner performed on them
+3. What could change the result
 
-{tieInstructions}
+CRITICAL JSON RULES:
+- Return ONLY valid JSON, nothing else
+- Use \\n for newlines inside strings, NOT actual line breaks
+- Keep text concise (under 500 characters per field)
 
-Make "whyItWon" around 4-6 sentences with clear structure. Use bullet points (•) for lists within the text.
-Make "whatCouldChange" 2-3 sentences.
+Return this exact JSON structure:
+{"dataAnalysis": "Winner summary and key criteria analysis here", "whatCouldChange": "What would flip the ranking"}`;
 
-Respond in JSON format:
-{
-  "whyItWon": "...",
-  "whatCouldChange": "..."
-}
-`;
+// Part B: Personal recommendation based on user context
+const PERSONAL_ANALYSIS_PROMPT = `You are a thoughtful advisor recommending options based on user's personal situation.
 
-const NO_TIE_INSTRUCTIONS = `1. "whyItWon" - A beautifully structured, spaced-out explanation:
-   - SUMMARY: One bold sentence.
-   - [Double Newline]
-   - YOUR TOP PRIORITIES: Explain how it met your top 2-3 weights.
-   - [Double Newline]
-   - KEY ADVANTAGES: Explain why it beat the others.
-   - USE SECOND PERSON (You/Your). Use double newlines for spacing.
+DECISION INFO:
+- Dilemma: {dilemma}
+- Options: {options}
+- Data Winner: {winner}
+- Runner-up: {runnerUp}
 
-2. "whatCouldChange" - One key trade-off that could flip the result.`;
+USER'S PERSONAL CONTEXT:
+{userContext}
 
-const TIE_INSTRUCTIONS = `1. "whyItWon" - Explain why they tied:
-   - SUMMARY: Acknowledge the tie.
-   - [Double Newline]
-   - BALANCE: Explain how priorities balanced out.
-   - [Double Newline]
-   - DIFFERENCES: Strength of each.
-   - Use double newlines for spacing.
+YOUR TASK: Based on their personal context (not scores), recommend the best fit option. You may agree or disagree with the data winner.
 
-2. "whatCouldChange" - How to break the tie.`;
+CRITICAL JSON RULES:
+- Return ONLY valid JSON, nothing else
+- Use \\n for newlines inside strings, NOT actual line breaks
+- Keep recommendation under 400 characters
+
+Return this exact JSON structure:
+{"personalRecommendation": "Your personalized recommendation here", "recommendedOption": "Option name", "agreesWithData": true}`;
 
 export async function POST(request) {
     try {
-        const { winner, ranking, weights, scores, hasTie, tiedWinners } = await request.json();
+        const { winner, ranking, weights, scores, hasTie, tiedWinners, userContext, dilemma, options } = await request.json();
 
         const winnerDisplay = hasTie
             ? tiedWinners.map(w => w.option).join(' and ')
             : winner.option;
+        
+        const runnerUp = ranking.length > 1 ? ranking[1] : null;
+        const scoreGap = runnerUp ? (winner.score - runnerUp.score).toFixed(1) : 0;
 
-        const prompt = EXPLAIN_PROMPT
-            .replace("{hasTie}", hasTie ? "Yes - multiple options tied for first place" : "No - there is a clear winner")
+        // Generate Part A: Data Analysis
+        const dataPrompt = DATA_ANALYSIS_PROMPT
             .replace("{winner}", winnerDisplay)
             .replace("{winnerScore}", winner.score.toFixed(1))
+            .replace("{runnerUp}", runnerUp?.option || "N/A")
+            .replace("{runnerUpScore}", runnerUp?.score?.toFixed(1) || "N/A")
+            .replace("{scoreGap}", scoreGap)
             .replace("{ranking}", JSON.stringify(ranking))
-            .replace("{tieInstructions}", hasTie ? TIE_INSTRUCTIONS : NO_TIE_INSTRUCTIONS)
             .replace("{weights}", JSON.stringify(weights))
             .replace("{scores}", JSON.stringify(scores));
 
-        const result = await generateWithRetry(prompt);
-        const responseText = result.response.text();
+        let dataAnalysis = "";
+        let whatCouldChange = "";
 
         try {
-            // Try to parse JSON from response
-            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]);
-                return NextResponse.json({
-                    whyItWon: parsed.whyItWon || "This option scored highest based on your priorities.",
-                    whatCouldChange: parsed.whatCouldChange || "Try adjusting your criteria weights to see how results might change."
-                });
-            }
-        } catch (parseError) {
-            console.error("Failed to parse explanation:", parseError);
+            const dataResult = await generateWithRetry(dataPrompt);
+            const dataParsed = parseJsonFromResponse(dataResult.response.text());
+            dataAnalysis = dataParsed.dataAnalysis || "";
+            whatCouldChange = dataParsed.whatCouldChange || "";
+        } catch (e) {
+            console.error("Data analysis generation failed:", e);
+            // Provide a more detailed fallback based on available data
+            const topCriteria = Object.entries(weights)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 2)
+                .map(([crit]) => crit);
+            
+            dataAnalysis = `${winnerDisplay} achieved the highest weighted score of ${winner.score.toFixed(1)} based on your priorities.\n\nYour top priorities were ${topCriteria.join(' and ')}, which significantly influenced this result.`;
+            whatCouldChange = `If you increased the weight of lower-priority criteria, the ranking could shift. The runner-up ${runnerUp?.option || 'option'} is ${scoreGap} points behind.`;
         }
 
-        // Fallback response
+        // Generate Part B: Personal Recommendation (only if we have user context)
+        let personalRecommendation = "";
+        let recommendedOption = winnerDisplay;
+        let agreesWithData = true;
+
+        const hasUserContext = userContext && Object.keys(userContext).length > 0;
+        
+        if (hasUserContext) {
+            // Format user context for the prompt
+            const contextStr = Object.entries(userContext)
+                .filter(([_, v]) => v && v !== 'null' && (typeof v !== 'object' || (Array.isArray(v) && v.length > 0)))
+                .map(([k, v]) => `- ${k.replace(/_/g, ' ')}: ${Array.isArray(v) ? v.join(', ') : v}`)
+                .join('\n');
+
+            const personalPrompt = PERSONAL_ANALYSIS_PROMPT
+                .replace("{dilemma}", dilemma || "Making a decision")
+                .replace("{options}", JSON.stringify(options || ranking.map(r => r.option)))
+                .replace("{winner}", winnerDisplay)
+                .replace("{runnerUp}", runnerUp?.option || "other options")
+                .replace("{userContext}", contextStr || "No specific personal details provided.");
+
+            try {
+                const personalResult = await generateWithRetry(personalPrompt);
+                const personalParsed = parseJsonFromResponse(personalResult.response.text());
+                personalRecommendation = personalParsed.personalRecommendation || "";
+                recommendedOption = personalParsed.recommendedOption || winnerDisplay;
+                agreesWithData = personalParsed.agreesWithData !== false;
+            } catch (e) {
+                console.error("Personal analysis generation failed:", e);
+                // If parsing fails but we have context, provide a basic personal note
+                if (contextStr && contextStr.length > 0) {
+                    personalRecommendation = `Based on your specific situation (${contextStr.split('\n').slice(0, 2).join('; ')}), ${winnerDisplay} appears to be a strong match. Consider how well it fits your stated preferences and constraints.`;
+                    recommendedOption = winnerDisplay;
+                } else {
+                    personalRecommendation = "";
+                }
+            }
+        }
+
         return NextResponse.json({
-            whyItWon: `${winner.option} emerged as your top choice because it best aligns with how you weighted your priorities.`,
-            whatCouldChange: "If you valued some of your lower-weighted criteria more, the results might shift. Consider if any trade-offs feel worth reconsidering."
+            // Part A: Data-driven analysis
+            dataAnalysis,
+            whatCouldChange,
+            // Part B: Personal recommendation
+            personalRecommendation,
+            recommendedOption,
+            agreesWithData,
+            hasUserContext,
+            // Legacy field for backwards compatibility
+            whyItWon: dataAnalysis
         });
+
     } catch (error) {
         console.error("Explain API Error:", error);
         return NextResponse.json(

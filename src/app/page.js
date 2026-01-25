@@ -31,7 +31,18 @@ export default function Home() {
         setPhase('rating');
     };
 
-    const handleAnalyze = ({ weights: w, scores }) => {
+    const handleAnalyze = ({ weights: w, scores, userContext: quickDetailsContext }) => {
+        // Merge Quick Details context with existing userContext
+        if (quickDetailsContext && Object.keys(quickDetailsContext).length > 0) {
+            setData(prevData => ({
+                ...prevData,
+                userContext: {
+                    ...prevData.userContext,
+                    ...quickDetailsContext  // Quick Details takes precedence
+                }
+            }));
+        }
+
         // Deterministic WSM Algorithm (Raw Weighted Sum)
         const calculatedScores = data.options.map(opt => {
             let weightedSum = 0;
@@ -152,6 +163,10 @@ export default function Home() {
                 {phase === 'explanation' && results && (
                     <ExplanationView
                         results={results}
+                        userContext={data.userContext || {}}
+                        dilemma={dilemma}
+                        options={data.options}
+                        criteria={data.criteria}
                         onReset={handleReset}
                         onBackToRating={() => setPhase('rating')}
                         onEditOptions={handleEditOptions}

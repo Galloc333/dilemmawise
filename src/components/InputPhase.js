@@ -218,14 +218,49 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
         setShowConfirmModal(true);
     };
 
-    const proceedToCriteria = () => {
+    const proceedToCriteria = async () => {
         setShowConfirmModal(false);
         setScreen(SCREENS.CRITERIA);
-        setMessages([{
-            role: 'assistant',
-            text: `Great! Now let's figure out what matters to you.\n\nWhat factors are important when comparing ${options.join(' and ')}?\n\nFor example: [[Criterion:Price]], [[Criterion:Quality]], [[Criterion:Convenience]]...`
-        }]);
+        setMessages([]); // Clear messages, will be populated by API
         setChatInput('');
+        setIsTyping(true);
+        
+        try {
+            // Call chat API to get context-aware criteria suggestions
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages: [{ role: 'user', text: `I want to compare: ${options.join(', ')}. What factors should I consider?` }],
+                    currentOptions: options,
+                    currentCriteria: [],
+                    currentDilemma: coreDilemma,
+                    currentPhase: 'CRITERIA',
+                    userContext: userContext
+                })
+            });
+            const data = await response.json();
+            
+            // Use the AI-generated response with context-aware criteria suggestions
+            setMessages([{ role: 'assistant', text: data.response }]);
+            
+            // Auto-add any extracted criteria from the response
+            const newCriteria = (data.suggestedCriteria || []).map(c => 
+                c.charAt(0).toUpperCase() + c.slice(1)
+            );
+            if (newCriteria.length > 0) {
+                setCriteria(prev => [...new Set([...prev, ...newCriteria])]);
+            }
+        } catch (error) {
+            console.error('Failed to get criteria suggestions:', error);
+            // Fallback to a simple prompt without hardcoded examples
+            setMessages([{
+                role: 'assistant',
+                text: `Great! Now let's figure out what matters to you.\n\nWhat factors are important when comparing ${options.join(' and ')}?`
+            }]);
+        } finally {
+            setIsTyping(false);
+        }
     };
 
     // Final Submit
@@ -317,7 +352,7 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
 
                     <div className="dilemma-card">
                         <label>What's the core question you're trying to answer?</label>
-                        <p className="helper-text">Keep it simple – just the decision question, not the details yet. We'll ask about options and criteria in the next steps.</p>
+                        <p className="helper-text">Keep it simple – just the decision question, not the details yet. We'll ask about options and criterias in the next steps.</p>
                         <textarea
                             value={dilemmaInput}
                             onChange={handleDilemmaInputChange}

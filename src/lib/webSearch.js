@@ -54,7 +54,23 @@ Output JSON Format:
     try {
         const result = await generateWithRetry(SEARCH_SIMULATION_PROMPT);
         const text = result.response.text();
-        return parseJsonFromResponse(text) || [];
+        
+        let parsed;
+        try {
+            parsed = parseJsonFromResponse(text);
+        } catch (parseError) {
+            console.warn("[WebSearch] JSON parse failed, returning empty results:", parseError.message);
+            return [];
+        }
+        
+        // Ensure we return an array
+        if (Array.isArray(parsed)) {
+            return parsed;
+        } else if (parsed && typeof parsed === 'object') {
+            // Sometimes LLM wraps array in an object like { results: [...] }
+            return parsed.results || parsed.items || [];
+        }
+        return [];
     } catch (geminiError) {
         console.error("Gemini Search Simulation Error:", geminiError);
         return [];

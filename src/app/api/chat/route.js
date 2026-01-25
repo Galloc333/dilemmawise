@@ -63,15 +63,25 @@ const OPTIONS_PHASE_INSTRUCTIONS = `**You are in the OPTIONS phase.**
 - Your ONLY goal is to help them identify options.
 - DO NOT ask about criteria yet.
 - If they provide options, confirm them: "I've added [[Option:X]] and [[Option:Y]]."
-- If they're vague, ask clarifying questions about what specific options they're considering.
-- If they ask for suggestions, you may suggest relevant options based on the dilemma.`;
+- If they're vague or need help, suggest specific options using CLICKABLE TAGS.
+
+**CRITICAL - ALWAYS USE TAGS FOR SUGGESTIONS:**
+When suggesting options, you MUST format them as clickable tags like this:
+"Are you considering [[Option:Cow's milk]], [[Option:Almond milk]], or [[Option:Oat milk]]?"
+
+NEVER suggest options in plain text like "cow's milk, almond milk" - ALWAYS use [[Option:Name]] format so users can click to add them.`;
 
 const CRITERIA_PHASE_INSTRUCTIONS = `**You are in the CRITERIA phase.**
 - The options are already confirmed (see Options above).
 - Your ONLY goal is to help them identify CRITERIA (factors that matter).
 - Ask what factors are important to them when comparing these options.
-- Suggest relevant criteria: [[Criterion:Price]], [[Criterion:Quality]], etc.
-- DO NOT ask for more options unless the user explicitly wants to add some.`;
+- DO NOT ask for more options unless the user explicitly wants to add some.
+
+**CRITICAL - ALWAYS USE TAGS FOR SUGGESTIONS:**
+When suggesting criteria, you MUST format them as clickable tags like this:
+"What matters to you? Maybe [[Criterion:Price]], [[Criterion:Quality]], or [[Criterion:Taste]]?"
+
+NEVER suggest criteria in plain text - ALWAYS use [[Criterion:Name]] format so users can click to add them.`;
 
 
 async function detectSearchNeed(messages, currentDilemma, currentOptions) {
