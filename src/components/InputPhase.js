@@ -159,44 +159,44 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             // Move to OPTIONS screen
             setScreen(SCREENS.OPTIONS);
 
-            // If no options extracted, ask chat API for a context-aware initial message
-            if (extractedOptions.length === 0) {
-                setIsTyping(true);
-                try {
-                    const chatRes = await fetch('/api/chat', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            messages: [{ role: 'user', text: `I need help deciding: ${finalDilemma}` }],
-                            currentOptions: [],
-                            currentCriteria: extractedCriteria,
-                            currentDilemma: finalDilemma,
-                            currentPhase: 'OPTIONS',
-                            userContext: data.userContext || {}
-                        })
-                    });
-                    const chatData = await chatRes.json();
-                    setMessages([{ role: 'assistant', text: chatData.response }]);
+            // Always call LLM for context-aware options suggestions (similar to criteria phase)
+            setIsTyping(true);
+            try {
+                const chatRes = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: [{ role: 'user', text: `I need help deciding: ${finalDilemma}` }],
+                        currentOptions: extractedOptions,
+                        currentCriteria: extractedCriteria,
+                        currentDilemma: finalDilemma,
+                        currentPhase: 'OPTIONS',
+                        userContext: data.userContext || {}
+                    })
+                });
+                const chatData = await chatRes.json();
+                setMessages([{ role: 'assistant', text: chatData.response }]);
 
-                    // Auto-add any extracted options from the response
-                    const newOpts = (chatData.suggestedOptions || []).map(capitalizeFirst);
-                    if (newOpts.length > 0) {
-                        setOptions(prev => [...new Set([...prev, ...newOpts])]);
-                    }
-                } catch (e) {
-                    setMessages([{ role: 'assistant', text: `What specific options are you considering for this decision?` }]);
-                } finally {
-                    setIsTyping(false);
+                // Auto-add any extracted options from the response
+                const newOpts = (chatData.suggestedOptions || []).map(capitalizeFirst);
+                if (newOpts.length > 0) {
+                    setOptions(prev => [...new Set([...prev, ...newOpts])]);
                 }
-            } else {
-                // Show appropriate message based on whether criteria were also extracted
+            } catch (err) {
+                console.error('Chat API error:', err);
+                // Fallback message
                 const criteriaNote = extractedCriteria.length > 0
                     ? ` I also noticed some factors you care about – we'll review those in the next step.`
                     : '';
+                const optionsNote = extractedOptions.length > 0
+                    ? `I found some options in your question. Review them in your basket, or add more below.${criteriaNote}\n\n`
+                    : '';
                 setMessages([{
                     role: 'assistant',
-                    text: `I found some options in your question. Review them in your basket, or add more below.${criteriaNote}\n\nWhat other options are you considering?`
+                    text: `${optionsNote}What options are you considering for this decision?`
                 }]);
+            } finally {
+                setIsTyping(false);
             }
         } catch (error) {
             console.error("Analysis error:", error);
@@ -352,7 +352,7 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
 
                     <div className="dilemma-card">
                         <label>What's the core question you're trying to answer?</label>
-                        <p className="helper-text">Keep it simple – just the decision question, not the details yet. We'll ask about options and criterias in the next steps.</p>
+                        <p className="helper-text">Keep it simple – just the decision question, not the details yet. We'll ask about options and criteria in the next steps.</p>
                         <textarea
                             value={dilemmaInput}
                             onChange={handleDilemmaInputChange}
@@ -517,7 +517,7 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             <div className="chat-section">
                 <div className="chat-header">
                     <span className="step-badge">{isOptionsScreen ? 'Step 2 of 3' : 'Step 3 of 3'}</span>
-                    <h2>{isOptionsScreen ? 'Define Your Options' : 'Define Your Criterias'}</h2>
+                    <h2>{isOptionsScreen ? 'Define Your Options' : 'Define Your Criteria'}</h2>
                     <p className="dilemma-display">{coreDilemma}</p>
                 </div>
 
@@ -525,11 +525,17 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                     {messages.map((msg, idx) => (
                         <div key={idx} className={`chat-message ${msg.role}`}>
                             <div className="message-bubble">
-                                {msg.text.split(/(\[\[Option:[^\]]+\]\]|\[\[Criterion:[^\]]+\]\])/g).map((part, i) => {
+                                {msg.text.split(/(\[\[Option:[^\]]+\]\]|\[\[Criterion:[^\]]+\]\]|\[\[[^\]]+\]\])/g).map((part, i) => {
                                     const optionMatch = part.match(/^\[\[Option:([^\]]+)\]\]$/);
                                     if (optionMatch) {
                                         const name = optionMatch[1];
                                         const exists = options.includes(name) || options.includes(capitalizeFirst(name));
+                                        
+                                        // In CRITERIA phase, if option already exists, show as plain text for natural flow
+                                        if (screen === SCREENS.CRITERIA && exists) {
+                                            return <span key={i}>{name}</span>;
+                                        }
+                                        
                                         return (
                                             <button key={i}
                                                 onClick={() => !exists && setOptions(prev => [...new Set([...prev, capitalizeFirst(name)])])}
@@ -549,6 +555,11 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                                                 {exists ? '✓' : '✨'} {name}
                                             </button>
                                         );
+                                    }
+                                    // Handle simple brackets [[Name]] - just remove brackets for plain text display
+                                    const simpleBracketMatch = part.match(/^\[\[([^\]]+)\]\]$/);
+                                    if (simpleBracketMatch) {
+                                        return simpleBracketMatch[1];
                                     }
                                     return part;
                                 })}
@@ -582,7 +593,7 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             {/* Right: Basket */}
             <div className="basket-section">
                 <div className="basket-card">
-                    <h3>{isOptionsScreen ? '🎯 Your Options' : '📊 Your Criterias'}</h3>
+                    <h3>{isOptionsScreen ? '🎯 Your Options' : '📊 Your Criteria'}</h3>
                     <p className="basket-hint">
                         {isOptionsScreen
                             ? 'Add at least 2 options to compare'
