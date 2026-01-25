@@ -1,4 +1,4 @@
-import { model } from "@/lib/gemini";
+import { model, generateWithRetry } from "@/lib/gemini";
 import { performWebSearch } from "@/lib/webSearch";
 import { NextResponse } from "next/server";
 
@@ -6,88 +6,110 @@ const CHAT_SYSTEM_PROMPT = `You are DilemmaWise, a precision decision coach. You
 
 Current State:
 - Core Dilemma: {dilemma}
+- Current Phase: {phase}
 - Options: {options}
 - Criteria: {criteria}
+- User Context: {userContext}
 
 WORKFLOW RULES (Follow strictly):
 
-FAST TRACK / FULL CONTEXT:
-- If the user provides a FULL dilemma description (contains BOTH specific Options AND desired Criteria/Concerns), SKIP the phases.
-- Extract ALL Options and Criteria immediately into the JSON block.
-- In your response, explicitly say: "I see you've already thought through your options and criteria, so I've added them for you. Feel free to tweak them, add more manually, or consult with me to refine the structure."
+## PHASE-SPECIFIC BEHAVIOR:
+{phaseInstructions}
 
-NORMAL PHASED FLOW (If info is partial):
-PHASE 1: DEFINE OPTIONS
-- If "Options" are empty or few, your ONLY goal is to elicit concrete options.
-- ask the user to list their options or use web search to suggest specific models/choices if they ask for help.
-- **CRITICAL**: If the user provides specific options (e.g., "Germany vs Israel"), ACCEPT THEM EXACTLY. Do NOT split them into sub-options (e.g., "Berlin", "Munich") unless explicitly asked.
-- **STRICT ADHERENCE**: Never invent options if the user has clearly stated their set.
+## STATE AWARENESS:
+- **TRUTH SOURCE**: Trust the \`Current State\` variables above as the real-time truth.
+- **CONFLICT RESOLUTION**: If \`Current State\` says "None" but the user JUST listed items in their message, TRUST THE USER'S MESSAGE and extract them.
 
-PHASE 2: VERIFY OPTIONS
-- Once options are on the table, ASK the user to confirm: "Are these all the options you want to consider?"
-- Do NOT move to Criteria until the user confirms the Option list is complete.
+## USER CONTEXT AWARENESS:
+- The User Context contains personal details the user has already shared (budget, location, preferences, etc.).
+- DO NOT ask for information that's already in User Context.
+- USE the context when making suggestions (e.g., if budget is 3500 ILS, suggest options within that range).
 
-PHASE 3: DEFINE CRITERIA
-- Only AFTER options are confirmed, ask about Criteria (factors for comparison).
-- Suggest standard criteria (Price, Quality, etc.) but prioritize user's specific concerns.
+## EXTRACTION vs SUGGESTION (CRITICAL):
+- **USER-PROVIDED ITEMS**: If the user explicitly states options or criteria in their message, EXTRACT them and put them in the JSON block.
+- **YOUR SUGGESTIONS**: If YOU (the AI) are suggesting options or criteria, DO NOT put them in the JSON. Only tag them in the text so the user can click to add them.
+- The JSON block is ONLY for items the USER provided, NOT for your suggestions.
+
+## SPELLING CORRECTION (IMPORTANT):
+- When extracting user-provided options or criteria, CORRECT any obvious spelling mistakes or typos.
+- For brand names, products, or proper nouns, use the CORRECT spelling (e.g., "xiaaomi" → "Xiaomi", "Samsunf" → "Samsung", "iphne" → "iPhone").
+- In your visible response, ALWAYS use the CORRECTED version in [[Option:CorrectName]] tags.
+- The user should see the properly spelled version, not their typo.
+
+## ANTI-HALLUCINATION:
+- **NO SCRIPTING**: Do NOT generate "User:" or "Assistant:" lines. Stop immediately after your response.
 
 GENERAL GUIDELINES:
-1. **MANDATORY TAGGING**: 
-   - Every candidate Option/Criterion must be tagged: [[Option:Name]] or [[Criterion:Name]].
-   - Use tags INSTEAD of bold text for suggestions.
-2. **NO FLUFF**: Be concise. Clear instructions.
+1. **MANDATORY TAGGING**: Every candidate Option/Criterion must be tagged: [[Option:Name]] or [[Criterion:Name]].
+2. **NO FLUFF**: Be concise.
 3. **WEB SEARCH**: If providing external suggestions, use specific links [Store](URL).
 
 Web Search Results:
 {searchResults}
 
-HIDDEN OUTPUT:
-Reformulate the decision as a single clear question in "coreDilemma".
+HIDDEN OUTPUT (JSON for EXTRACTED user items ONLY, with spelling corrected):
 \`\`\`json
 {
-  "newlySuggestedOptions": [],
-  "newlySuggestedCriteria": [],
+  "newlySuggestedOptions": ["Corrected Option Name"],
+  "newlySuggestedCriteria": ["Corrected Criterion Name"],
   "coreDilemma": "..."
 }
 \`\`\`
 `;
 
-async function detectSearchNeed(messages) {
+
+const OPTIONS_PHASE_INSTRUCTIONS = `**You are in the OPTIONS phase.**
+- The user needs to define CONCRETE options to compare.
+- Your ONLY goal is to help them identify options.
+- DO NOT ask about criteria yet.
+- If they provide options, confirm them: "I've added [[Option:X]] and [[Option:Y]]."
+- If they're vague, ask clarifying questions about what specific options they're considering.
+- If they ask for suggestions, you may suggest relevant options based on the dilemma.`;
+
+const CRITERIA_PHASE_INSTRUCTIONS = `**You are in the CRITERIA phase.**
+- The options are already confirmed (see Options above).
+- Your ONLY goal is to help them identify CRITERIA (factors that matter).
+- Ask what factors are important to them when comparing these options.
+- Suggest relevant criteria: [[Criterion:Price]], [[Criterion:Quality]], etc.
+- DO NOT ask for more options unless the user explicitly wants to add some.`;
+
+
+async function detectSearchNeed(messages, currentDilemma, currentOptions) {
     const lastMessage = messages[messages.length - 1].text.toLowerCase();
 
-    // Multi-language keyword detection (English & Hebrew)
-    const keywords = [
-        'recommend', 'suggest', 'help me find', 'options for', 'best', 'which should i',
-        'laptop', 'computer', 'desktop', 'camera', 'phone', 'budget of', 'looking for',
-        'תציע', 'תמליץ', 'איזה כדאי', 'מחשב', 'דגמים', 'אופציות', 'תקציב של', 'מחפש',
-        'חנות', 'חיפה', 'תל אביב', 'איפה לקנות', 'הצעות'
+    // Generic intent detection: Does the user want external information?
+    const searchIntentKeywords = [
+        'recommend', 'suggest', 'help me find', 'best', 'compare', 'reviews',
+        'pros and cons', 'what are some', 'options for', 'alternatives', 'which is better'
     ];
 
-    const hasKeyword = keywords.some(k => lastMessage.includes(k));
+    const hasSearchIntent = searchIntentKeywords.some(k => lastMessage.includes(k));
 
-    // If the user seems frustrated or keeps asking for specific options, force search
-    const isDemandingSpecifics = /תציע|דגמים|models|offers|options|ספציפי/i.test(lastMessage);
+    // Only search if the options are concrete (real-world entities) and user asks for help.
+    // Avoid searching for abstract options like "Job A", "Option 1", "University X".
+    const isAbstract = currentOptions?.some(opt => /^(option|choice|alternative|job|plan|path)\s*[a-z0-9]?$/i.test(opt));
 
-    return hasKeyword || isDemandingSpecifics;
+    return hasSearchIntent && !isAbstract;
 }
 
 export async function POST(request) {
     try {
-        const { messages, currentOptions, currentCriteria, currentDilemma } = await request.json();
+        const { messages, currentOptions, currentCriteria, currentDilemma, currentPhase, userContext } = await request.json();
 
         let searchResultsText = "No web search performed.";
         try {
-            if (await detectSearchNeed(messages)) {
+            if (await detectSearchNeed(messages, currentDilemma, currentOptions)) {
                 const lastMsg = messages[messages.length - 1].text;
-                // Use a more structured prompt for query generation to ensure clean output
-                const queryRes = await model.generateContent([
-                    { text: "Generate a single, precise web search query in English to find CURRENT specific product models, local prices, and store links in Israel. Focus on finding EXACT models (e.g. 'Laptop models under 4000 NIS Israel KSP Ivory'). Output ONLY the query string." },
-                    { text: lastMsg }
+                const optionsContext = currentOptions?.length > 0 ? `Options: ${currentOptions.join(', ')}.` : '';
+                const dilemmaContext = currentDilemma ? `Dilemma: ${currentDilemma}.` : '';
+
+                // Generic search prompt based on actual context
+                const queryRes = await generateWithRetry([
+                    { text: `Generate a single, precise web search query to find relevant information for a decision. Use the context below. Do NOT add any assumptions about location or domain unless the user specified them. Output ONLY the query string.\n${dilemmaContext}\n${optionsContext}\nUser request: ${lastMsg}` }
                 ]);
 
                 let query = queryRes.response.text().trim();
-                // Clean up any AI chatter from the query
-                query = query.split('\n')[0].replace(/["']/g, '').trim();
+                query = query.split('\n')[0].replace(/["\']/g, '').trim();
 
                 console.log(`[Chat API] Query: ${query}`);
 
@@ -103,10 +125,24 @@ export async function POST(request) {
             searchResultsText = "Search service temporarily unavailable.";
         }
 
+        // Select phase-specific instructions
+        const phaseInstructions = currentPhase === 'CRITERIA' ? CRITERIA_PHASE_INSTRUCTIONS : OPTIONS_PHASE_INSTRUCTIONS;
+
+        // Format user context for the prompt
+        const userContextSummary = userContext && Object.keys(userContext).length > 0
+            ? Object.entries(userContext)
+                .filter(([_, v]) => v && (typeof v !== 'object' || (Array.isArray(v) && v.length > 0)))
+                .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+                .join('; ')
+            : 'None yet';
+
         const systemPrompt = CHAT_SYSTEM_PROMPT
             .replace("{dilemma}", currentDilemma || "None yet")
+            .replace("{phase}", currentPhase || "OPTIONS")
+            .replace("{phaseInstructions}", phaseInstructions)
             .replace("{options}", currentOptions?.join(", ") || "None yet")
             .replace("{criteria}", currentCriteria?.join(", ") || "None yet")
+            .replace("{userContext}", userContextSummary)
             .replace("{searchResults}", searchResultsText);
 
         const conversationParts = [
@@ -116,7 +152,7 @@ export async function POST(request) {
             }))
         ];
 
-        const result = await model.generateContent(conversationParts.map(p => p.text).join("\n\n"));
+        const result = await generateWithRetry(conversationParts.map(p => p.text).join("\n\n"));
         let responseText = result.response.text();
 
         let suggestedOptions = [];
@@ -141,10 +177,45 @@ export async function POST(request) {
             }
         }
 
-        // Final cleanup of any potential prefixes
+        // Fallback: Extract from visible [[Option:X]] and [[Criterion:X]] tags if JSON didn't capture them
+        if (suggestedOptions.length === 0) {
+            const optionMatches = responseText.match(/\[\[Option:([^\]]+)\]\]/g) || [];
+            const extractedFromText = optionMatches.map(m => m.replace(/\[\[Option:|\]\]/g, '').trim());
+            // Only add options that appear in "I've added" context (user-provided, not suggestions)
+            if (responseText.toLowerCase().includes("added") && extractedFromText.length > 0) {
+                suggestedOptions = extractedFromText.slice(0, 3); // Limit to 3
+            }
+        }
+
+        if (suggestedCriteria.length === 0) {
+            const criteriaMatches = responseText.match(/\[\[Criterion:([^\]]+)\]\]/g) || [];
+            const extractedFromText = criteriaMatches.map(m => m.replace(/\[\[Criterion:|\]\]/g, '').trim());
+            if (responseText.toLowerCase().includes("added") && extractedFromText.length > 0) {
+                suggestedCriteria = extractedFromText.slice(0, 3);
+            }
+        }
+
+        // Comprehensive cleanup to remove internal prompt leakage and prefixes
         responseText = responseText
+            // Remove any leaked "HIDDEN OUTPUT" text and everything after it
+            .replace(/HIDDEN OUTPUT.*$/is, '')
+            // Remove JSON code blocks that might have leaked
+            .replace(/```json[\s\S]*?```/g, '')
+            .replace(/```[\s\S]*?```/g, '')
+            // Remove any remaining system instruction leakage
+            .replace(/\(JSON for EXTRACTED.*?\)/gi, '')
+            .replace(/newlySuggested(Options|Criteria)/gi, '')
+            .replace(/coreDilemma/gi, '')
+            // Remove assistant/user prefixes
             .replace(/^(Assistant|DilemmaWise):\s*/i, '')
             .replace(/^User:\s*/i, '')
+            // Clean up any leftover artifacts
+            .replace(/\{\s*\}/g, '')
+            .replace(/\[\s*\]/g, '')
+            .replace(/:\s*$/gm, '')
+            .replace(/\*\s*\*\s*$/gm, '')
+            // Final trimming and cleanup
+            .replace(/\n{3,}/g, '\n\n')
             .trim();
 
         return NextResponse.json({

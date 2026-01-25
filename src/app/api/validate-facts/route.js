@@ -1,4 +1,4 @@
-import { model } from "@/lib/gemini";
+import { generateWithRetry } from "@/lib/gemini";
 import { NextResponse } from "next/server";
 
 const FACT_VALIDATION_PROMPT = `You are a fact-checking assistant for a decision-making app.
@@ -43,7 +43,7 @@ Context:
 
 Provide factual information if you have reliable knowledge, or indicate if web verification is needed.`;
 
-        const result = await model.generateContent([
+        const result = await generateWithRetry([
             { text: FACT_VALIDATION_PROMPT },
             { text: prompt }
         ]);

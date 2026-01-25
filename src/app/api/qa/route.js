@@ -1,4 +1,4 @@
-import { model } from "@/lib/gemini";
+import { generateWithRetry } from "@/lib/gemini";
 import { NextResponse } from "next/server";
 
 const QA_PROMPT = `You are an AI assistant helping a user understand their decision analysis results.
@@ -28,7 +28,7 @@ export async function POST(request) {
             .replace("{scores}", JSON.stringify(scores))
             .replace("{question}", question);
 
-        const result = await model.generateContent(prompt);
+        const result = await generateWithRetry(prompt);
         const responseText = result.response.text();
 
         return NextResponse.json({

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
 
-export default function ElicitationPhase({ options, criteria, weights, onComplete, onBack, savedDescription, dilemma }) {
+export default function ElicitationPhase({ options, criteria, weights, onComplete, onBack, savedDescription, dilemma, userContext = {} }) {
     const [stage, setStage] = useState('intro'); // intro, context, questions, complete
     const [context, setContext] = useState({});
     const [contextAnalysis, setContextAnalysis] = useState(null);
@@ -221,7 +221,7 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                 <div>
                                     <strong>Just {Math.floor(1.5 * criteria.length * options.length)} questions max</strong>
                                     <p style={{ margin: '0.25rem 0 0', opacity: 0.8, fontSize: '0.9rem' }}>
-                                        Short and focused - no tedious forms
+                                        Short and focused
                                     </p>
                                 </div>
                             </div>
@@ -239,9 +239,9 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                     flexShrink: 0
                                 }}>3</div>
                                 <div>
-                                    <strong>AI infers your preferences</strong>
+                                    <strong>Weighted-sum analysis</strong>
                                     <p style={{ margin: '0.25rem 0 0', opacity: 0.8, fontSize: '0.9rem' }}>
-                                        From your answers, I'll understand how each option meets each criterion
+                                        Your inputs are passed into a weighted-sum algorithm to compute which option fits you best
                                     </p>
                                 </div>
                             </div>
@@ -403,7 +403,24 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                         borderRadius: '1rem 1rem 0.25rem 1rem',
                                         marginLeft: '2rem'
                                     }}>
-                                        {resp.answer}
+                                        {/* Display human-readable scores instead of raw JSON */}
+                                        {resp.numeric_scores ? (
+                                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                                                {Object.entries(resp.numeric_scores).map(([opt, score]) => (
+                                                    <span key={opt} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                        <strong>{opt}:</strong>
+                                                        <span style={{
+                                                            background: 'hsl(var(--primary))',
+                                                            color: 'white',
+                                                            padding: '0.1rem 0.5rem',
+                                                            borderRadius: '0.75rem',
+                                                            fontSize: '0.85rem',
+                                                            fontWeight: 'bold'
+                                                        }}>{score}/10</span>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : resp.answer}
                                     </div>
                                 </div>
                             ))}
@@ -485,36 +502,86 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                                     📚 Web Evidence
                                                 </div>
 
-                                                {/* Chart Visualization */}
-                                                {currentQuestion.webFacts.chartData && currentQuestion.webFacts.chartData.length > 0 && (
+                                                {/* Chart Visualizations - supports multiple charts */}
+                                                {currentQuestion.webFacts.charts && currentQuestion.webFacts.charts.length > 0 && (
                                                     <div style={{ marginBottom: '1.5rem' }}>
-                                                        {currentQuestion.webFacts.chartTitle && (
-                                                            <div style={{ fontSize: '0.86rem', fontWeight: '600', marginBottom: '0.75rem', opacity: 0.8 }}>
-                                                                📊 {currentQuestion.webFacts.chartTitle}
-                                                            </div>
-                                                        )}
-                                                        <div style={{ background: 'hsl(var(--foreground) / 0.03)', padding: '1rem', borderRadius: '0.6rem', border: '1px solid hsl(var(--border) / 0.5)' }}>
-                                                            {currentQuestion.webFacts.chartData.map((item, idx) => {
-                                                                const maxValue = Math.max(...currentQuestion.webFacts.chartData.map(d => d.value));
-                                                                return (
-                                                                    <div key={idx} style={{ marginBottom: idx === currentQuestion.webFacts.chartData.length - 1 ? 0 : '1rem' }}>
-                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
-                                                                            <span style={{ fontWeight: '500' }}>{item.label}</span>
-                                                                            <span style={{ fontWeight: '600', color: 'hsl(var(--primary))' }}>{item.value}{item.unit || ''}</span>
+                                                        {currentQuestion.webFacts.charts.slice(0, 3).map((chart, chartIdx) => (
+                                                            <div key={chartIdx} style={{ marginBottom: chartIdx < currentQuestion.webFacts.charts.length - 1 ? '1.25rem' : 0 }}>
+                                                                {chart.chart_title && (
+                                                                    <div style={{ fontSize: '0.86rem', fontWeight: '600', marginBottom: '0.75rem', opacity: 0.8 }}>
+                                                                        📊 {chart.chart_title}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Bar Chart */}
+                                                                {(chart.chart_type === 'bar' || !chart.chart_type) && chart.chart_data && chart.chart_data.length > 0 && (
+                                                                    <div style={{ background: 'hsl(var(--foreground) / 0.03)', padding: '1rem', borderRadius: '0.6rem', border: '1px solid hsl(var(--border) / 0.5)' }}>
+                                                                        {chart.chart_data.map((item, idx) => {
+                                                                            const maxValue = Math.max(...chart.chart_data.map(d => d.value));
+                                                                            return (
+                                                                                <div key={idx} style={{ marginBottom: idx === chart.chart_data.length - 1 ? 0 : '1rem' }}>
+                                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
+                                                                                        <span style={{ fontWeight: '500' }}>{item.label}</span>
+                                                                                        <span style={{ fontWeight: '600', color: 'hsl(var(--primary))' }}>{item.value}{item.unit || ''}</span>
+                                                                                    </div>
+                                                                                    <div style={{ width: '100%', height: '8px', background: 'hsl(var(--foreground) / 0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                                                                                        <div style={{
+                                                                                            width: `${(item.value / maxValue) * 100}%`,
+                                                                                            height: '100%',
+                                                                                            background: 'hsl(var(--primary))',
+                                                                                            borderRadius: '4px',
+                                                                                            transition: 'width 1.2s ease-out'
+                                                                                        }} />
+                                                                                    </div>
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Scale Chart */}
+                                                                {chart.chart_type === 'scale' && chart.chart_data && chart.chart_data.length > 0 && (
+                                                                    <div style={{ background: 'hsl(var(--foreground) / 0.03)', padding: '1rem', borderRadius: '0.6rem', border: '1px solid hsl(var(--border) / 0.5)' }}>
+                                                                        <div style={{ position: 'relative', height: '40px', marginBottom: '0.5rem' }}>
+                                                                            <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '4px', background: 'linear-gradient(90deg, hsl(0 70% 60%), hsl(60 70% 60%), hsl(120 70% 60%))', borderRadius: '2px', transform: 'translateY(-50%)' }} />
+                                                                            {chart.chart_data.map((item, idx) => {
+                                                                                const maxValue = Math.max(...chart.chart_data.map(d => d.value));
+                                                                                const minValue = Math.min(...chart.chart_data.map(d => d.value));
+                                                                                const range = maxValue - minValue || 1;
+                                                                                const position = ((item.value - minValue) / range) * 100;
+                                                                                return (
+                                                                                    <div key={idx} style={{ position: 'absolute', left: `${position}%`, top: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                                                                                        <div style={{ background: 'hsl(var(--primary))', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '0.4rem', fontSize: '0.75rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                                                                            {item.label}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                );
+                                                                            })}
                                                                         </div>
-                                                                        <div style={{ width: '100%', height: '8px', background: 'hsl(var(--foreground) / 0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-                                                                            <div style={{
-                                                                                width: `${(item.value / maxValue) * 100}%`,
-                                                                                height: '100%',
-                                                                                background: 'hsl(var(--primary))',
-                                                                                borderRadius: '4px',
-                                                                                transition: 'width 1.2s ease-out'
-                                                                            }} />
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', opacity: 0.6 }}>
+                                                                            <span>Low</span>
+                                                                            <span>High</span>
                                                                         </div>
                                                                     </div>
-                                                                );
-                                                            })}
-                                                        </div>
+                                                                )}
+
+                                                                {/* Comparison Table */}
+                                                                {chart.chart_type === 'comparison_table' && chart.chart_data && chart.chart_data.length > 0 && (
+                                                                    <div style={{ background: 'hsl(var(--foreground) / 0.03)', padding: '1rem', borderRadius: '0.6rem', border: '1px solid hsl(var(--border) / 0.5)', overflowX: 'auto' }}>
+                                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                                            <tbody>
+                                                                                {chart.chart_data.map((item, idx) => (
+                                                                                    <tr key={idx} style={{ borderBottom: idx < chart.chart_data.length - 1 ? '1px solid hsl(var(--border) / 0.3)' : 'none' }}>
+                                                                                        <td style={{ padding: '0.5rem', fontWeight: '600' }}>{item.label}</td>
+                                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', color: 'hsl(var(--primary))', fontWeight: '500' }}>{item.value}{item.unit || ''}</td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
 
                                                         {currentQuestion.webFacts.takeaway && (
                                                             <div style={{
@@ -553,8 +620,8 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                                     )}
                                                 </div>
 
-                                                {/* Takeaway only if no chart (prevent double) */}
-                                                {!currentQuestion.webFacts.chartData && currentQuestion.webFacts.takeaway && (
+                                                {/* Takeaway only if no charts (prevent double) */}
+                                                {(!currentQuestion.webFacts.charts || currentQuestion.webFacts.charts.length === 0) && currentQuestion.webFacts.takeaway && (
                                                     <div style={{
                                                         marginBottom: '1.25rem',
                                                         padding: '0.75rem 1rem',

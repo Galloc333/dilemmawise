@@ -1,4 +1,4 @@
-import { model, parseJsonFromResponse } from "@/lib/gemini";
+import { generateWithRetry, parseJsonFromResponse } from "@/lib/gemini";
 import { NextResponse } from "next/server";
 
 const SYSTEM_PROMPT = `You are a Logic Validator for decision matrices.
@@ -34,7 +34,7 @@ export async function POST(request) {
 
         const prompt = `Options: ${JSON.stringify(options)}\nCriteria: ${JSON.stringify(criteria)}`;
 
-        const result = await model.generateContent([
+        const result = await generateWithRetry([
             { text: SYSTEM_PROMPT },
             { text: prompt }
         ]);

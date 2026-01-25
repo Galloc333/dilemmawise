@@ -1,37 +1,107 @@
 "use client";
 import { useState, useRef, useEffect } from 'react';
 
-// Icons
-const RobotIcon = () => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 4C16.42 4 20 7.58 20 12C20 16.42 16.42 20 12 20C7.58 20 4 16.42 4 12C4 7.58 7.58 4 12 4Z" fill="currentColor" fillOpacity="0.2" />
-        <path d="M12 6C8.69 6 6 8.69 6 12C6 15.31 8.69 18 12 18C15.31 18 18 15.31 18 12C18 8.69 15.31 6 12 6ZM12 8C14.21 8 16 9.79 16 12C16 14.21 14.21 16 12 16C9.79 16 8 14.21 8 12C8 9.79 9.79 8 12 8Z" fill="currentColor" />
-    </svg>
-);
+// SCREENS
+const SCREENS = {
+    DILEMMA: 'DILEMMA',
+    OPTIONS: 'OPTIONS',
+    CRITERIA: 'CRITERIA'
+};
 
 export default function InputPhase({ onNext, savedDescription, initialOptions = [], initialCriteria = [] }) {
+    // Helper
+    const capitalizeFirst = (str) => {
+        if (!str) return '';
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    };
+
+    // Text refinement helper - corrects spelling/typos while preserving meaning
+    const refineText = async (type, textOrItems) => {
+        try {
+            const isArray = Array.isArray(textOrItems);
+            const response = await fetch('/api/refine-text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(isArray
+                    ? { type, items: textOrItems }
+                    : { type, text: textOrItems }
+                )
+            });
+            const data = await response.json();
+            return data.refined || textOrItems;
+        } catch (e) {
+            console.error('Text refinement failed:', e);
+            return textOrItems; // Return original on error
+        }
+    };
+
+    // Screen State
+    const [screen, setScreen] = useState(() => {
+        if (initialOptions.length > 0 && initialCriteria.length > 0) return SCREENS.CRITERIA;
+        if (initialOptions.length > 0) return SCREENS.OPTIONS;
+        return SCREENS.DILEMMA;
+    });
+
     // Core State
+    const [coreDilemma, setCoreDilemma] = useState('');
     const [options, setOptions] = useState(initialOptions);
     const [criteria, setCriteria] = useState(initialCriteria);
-    const [showConfirmation, setShowConfirmation] = useState(false);
+    const [userContext, setUserContext] = useState({}); // Store extracted personal details
+
+    // Dilemma Input State
+    const [dilemmaInput, setDilemmaInput] = useState('');
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [inputGuidance, setInputGuidance] = useState(''); // Real-time guidance hint
+    const guidanceTimeoutRef = useRef(null);
 
     // Chat State
-    const [messages, setMessages] = useState(() => {
-        if (initialOptions.length > 0 || initialCriteria.length > 0) {
-            return [{
-                role: 'assistant',
-                text: "I'm ready to help you edit. You can add more options or criteria, or modify the existing ones."
-            }];
-        }
-        return [{
-            role: 'assistant',
-            text: "Hi! I'm DilemmaWise. Describe the decision you're facing, and I'll help you structure it. \n\nFor example: \"Should I move to New York or stay in London?\""
-        }];
-    });
+    const [messages, setMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
-    const [coreDilemma, setCoreDilemma] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef(null);
+
+    // Manual Input State
+    const [manualInput, setManualInput] = useState('');
+
+    // Confirmation Modal State
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [confirmAction, setConfirmAction] = useState(null); // 'criteria' or 'finish'
+
+    // Real-time input guidance - detects over-detailed input while typing
+    const analyzeInputWhileTyping = (text) => {
+        // Clear any pending timeout
+        if (guidanceTimeoutRef.current) {
+            clearTimeout(guidanceTimeoutRef.current);
+        }
+
+        // Debounce: wait 800ms after user stops typing
+        guidanceTimeoutRef.current = setTimeout(() => {
+            const wordCount = text.trim().split(/\s+/).length;
+            const hasOptions = /\b(or|vs\.?|versus|between)\b/i.test(text) && wordCount > 15;
+            const hasCriteria = /\b(care about|important|matters?|consider|priority|budget|price|cost)\b/i.test(text);
+            const hasNumbers = /\d{3,}/.test(text); // Budget amounts, prices, etc.
+            const hasMultipleSentences = (text.match(/[.!?]/g) || []).length > 1;
+
+            if (wordCount > 25 || (hasOptions && hasCriteria) || (hasNumbers && hasCriteria) || hasMultipleSentences) {
+                setInputGuidance("💡 You're sharing more than we need right now. Just the core question is enough – we'll ask about the details later.");
+            } else if (wordCount > 15 && hasOptions) {
+                setInputGuidance("💡 Keep it simple! What's the main question you're trying to answer?");
+            } else {
+                setInputGuidance('');
+            }
+        }, 800);
+    };
+
+    // Handle dilemma input change with real-time guidance
+    const handleDilemmaInputChange = (e) => {
+        const value = e.target.value;
+        setDilemmaInput(value);
+        if (value.length > 20) {
+            analyzeInputWhileTyping(value);
+        } else {
+            setInputGuidance('');
+        }
+    };
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -41,7 +111,137 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
         scrollToBottom();
     }, [messages]);
 
-    // Chat interaction
+    // SCREEN 1: Submit Dilemma
+    const handleDilemmaSubmit = async () => {
+        if (!dilemmaInput.trim()) return;
+
+        setIsAnalyzing(true);
+        setInputGuidance(''); // Clear any guidance
+
+        let dilemmaQuestion = dilemmaInput.trim();
+        dilemmaQuestion = dilemmaQuestion.charAt(0).toUpperCase() + dilemmaQuestion.slice(1);
+        if (!dilemmaQuestion.endsWith('?') && !dilemmaQuestion.endsWith('.')) {
+            dilemmaQuestion += '?';
+        }
+
+        try {
+            const response = await fetch('/api/analyze-input', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ description: dilemmaQuestion })
+            });
+            const data = await response.json();
+
+            // Use summarized dilemma if available, otherwise use the original (refined)
+            let finalDilemma = data.summarizedDilemma || dilemmaQuestion;
+            finalDilemma = await refineText('dilemma', finalDilemma);
+            setCoreDilemma(finalDilemma);
+
+            // Store user context for later use
+            if (data.userContext && Object.keys(data.userContext).length > 0) {
+                setUserContext(data.userContext);
+            }
+
+            // Refine and set extracted options
+            let extractedOptions = (data.options || []).map(capitalizeFirst);
+            if (extractedOptions.length > 0) {
+                extractedOptions = await refineText('options_list', extractedOptions);
+                setOptions(extractedOptions);
+            }
+
+            // Refine and set extracted criteria (for display on criteria screen)
+            let extractedCriteria = (data.criteria || []).map(capitalizeFirst);
+            if (extractedCriteria.length > 0) {
+                extractedCriteria = await refineText('criteria_list', extractedCriteria);
+                setCriteria(extractedCriteria);
+            }
+
+            // Move to OPTIONS screen
+            setScreen(SCREENS.OPTIONS);
+
+            // If no options extracted, ask chat API for a context-aware initial message
+            if (extractedOptions.length === 0) {
+                setIsTyping(true);
+                try {
+                    const chatRes = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            messages: [{ role: 'user', text: `I need help deciding: ${finalDilemma}` }],
+                            currentOptions: [],
+                            currentCriteria: extractedCriteria,
+                            currentDilemma: finalDilemma,
+                            currentPhase: 'OPTIONS',
+                            userContext: data.userContext || {}
+                        })
+                    });
+                    const chatData = await chatRes.json();
+                    setMessages([{ role: 'assistant', text: chatData.response }]);
+
+                    // Auto-add any extracted options from the response
+                    const newOpts = (chatData.suggestedOptions || []).map(capitalizeFirst);
+                    if (newOpts.length > 0) {
+                        setOptions(prev => [...new Set([...prev, ...newOpts])]);
+                    }
+                } catch (e) {
+                    setMessages([{ role: 'assistant', text: `What specific options are you considering for this decision?` }]);
+                } finally {
+                    setIsTyping(false);
+                }
+            } else {
+                // Show appropriate message based on whether criteria were also extracted
+                const criteriaNote = extractedCriteria.length > 0
+                    ? ` I also noticed some factors you care about – we'll review those in the next step.`
+                    : '';
+                setMessages([{
+                    role: 'assistant',
+                    text: `I found some options in your question. Review them in your basket, or add more below.${criteriaNote}\n\nWhat other options are you considering?`
+                }]);
+            }
+        } catch (error) {
+            console.error("Analysis error:", error);
+            setCoreDilemma(dilemmaQuestion);
+            setScreen(SCREENS.OPTIONS);
+            setMessages([{
+                role: 'assistant',
+                text: `What specific options are you considering for this decision?`
+            }]);
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+    // Move to Criteria Screen
+    const handleConfirmOptions = () => {
+        if (options.length < 2) return;
+        setConfirmAction('criteria');
+        setShowConfirmModal(true);
+    };
+
+    const proceedToCriteria = () => {
+        setShowConfirmModal(false);
+        setScreen(SCREENS.CRITERIA);
+        setMessages([{
+            role: 'assistant',
+            text: `Great! Now let's figure out what matters to you.\n\nWhat factors are important when comparing ${options.join(' and ')}?\n\nFor example: [[Criterion:Price]], [[Criterion:Quality]], [[Criterion:Convenience]]...`
+        }]);
+        setChatInput('');
+    };
+
+    // Final Submit
+    const handleFinish = () => {
+        if (criteria.length < 1) return;
+        setConfirmAction('finish');
+        setShowConfirmModal(true);
+    };
+
+    const proceedToFinish = () => {
+        setShowConfirmModal(false);
+        const description = messages.filter(m => m.role === 'user').map(m => m.text).join('\n');
+        onNext({ options, criteria, userContext }, description, coreDilemma);
+    };
+
+    // Chat Submit
     const handleChatSubmit = async () => {
         if (!chatInput.trim()) return;
 
@@ -58,21 +258,26 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                     messages: newMessages,
                     currentOptions: options,
                     currentCriteria: criteria,
-                    currentDilemma: coreDilemma
+                    currentDilemma: coreDilemma,
+                    currentPhase: screen,
+                    userContext: userContext
                 })
             });
             const data = await response.json();
 
-            // Add assistant response
             setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
-            if (data.coreDilemma) setCoreDilemma(data.coreDilemma);
 
-            // AUTO-POPULATE: If API returns highly confident suggestions (e.g. from full text), add them
-            if (data.suggestedOptions && data.suggestedOptions.length > 0) {
-                setOptions(prev => [...new Set([...prev, ...data.suggestedOptions])]);
+            // Auto-add ONLY user-extracted items (not suggestions) - with refinement
+            let newOptions = (data.suggestedOptions || []).map(capitalizeFirst);
+            let newCriteria = (data.suggestedCriteria || []).map(capitalizeFirst);
+
+            if (newOptions.length > 0) {
+                newOptions = await refineText('options_list', newOptions);
+                setOptions(prev => [...new Set([...prev, ...newOptions])]);
             }
-            if (data.suggestedCriteria && data.suggestedCriteria.length > 0) {
-                setCriteria(prev => [...new Set([...prev, ...data.suggestedCriteria])]);
+            if (newCriteria.length > 0) {
+                newCriteria = await refineText('criteria_list', newCriteria);
+                setCriteria(prev => [...new Set([...prev, ...newCriteria])]);
             }
         } catch (error) {
             console.error("Chat error:", error);
@@ -82,322 +287,604 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
         }
     };
 
+    // Manual Add - with text refinement
+    const handleManualAdd = async () => {
+        let val = capitalizeFirst(manualInput.trim());
+        if (!val) return;
+
+        // Refine the manually entered text
+        const type = screen === SCREENS.OPTIONS ? 'option' : 'criterion';
+        val = await refineText(type, val);
+
+        if (screen === SCREENS.OPTIONS && !options.includes(val)) {
+            setOptions(prev => [...prev, val]);
+        } else if (screen === SCREENS.CRITERIA && !criteria.includes(val)) {
+            setCriteria(prev => [...prev, val]);
+        }
+        setManualInput('');
+    };
+
     const handleRemoveOption = (opt) => setOptions(prev => prev.filter(o => o !== opt));
     const handleRemoveCriterion = (crit) => setCriteria(prev => prev.filter(c => c !== crit));
 
-    const canSubmit = options.length >= 2 && criteria.length >= 1;
+    // ========== SCREEN 1: DILEMMA ==========
+    if (screen === SCREENS.DILEMMA) {
+        return (
+            <div className="screen-container dilemma-screen">
+                <div className="screen-content">
+                    <h1 className="brand">DilemmaWise</h1>
+                    <p className="subtitle">AI-powered decision support</p>
 
-    const [isValidating, setIsValidating] = useState(false);
-    const [validationResult, setValidationResult] = useState(null);
-
-    const handleInitialSubmit = async () => {
-        setIsValidating(true);
-        try {
-            const res = await fetch('/api/validate-matrix', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ options, criteria })
-            });
-            const data = await res.json();
-            setValidationResult(data);
-        } catch (e) {
-            console.error("Validation failed", e);
-            setValidationResult({ isValid: true });
-        } finally {
-            setIsValidating(false);
-            setShowConfirmation(true);
-        }
-    };
-
-    const confirmAndProceed = () => {
-        const description = messages.filter(m => m.role === 'user').map(m => m.text).join('\n');
-        onNext({ options, criteria }, description, coreDilemma);
-    };
-
-    // Manual Input State
-    const [manualOption, setManualOption] = useState('');
-    const [manualCriterion, setManualCriterion] = useState('');
-
-    const handleManualAddOption = () => {
-        if (manualOption.trim() && !options.includes(manualOption.trim())) {
-            setOptions(prev => [...prev, manualOption.trim()]);
-            setManualOption('');
-        }
-    };
-
-    const handleManualAddCriterion = () => {
-        if (manualCriterion.trim() && !criteria.includes(manualCriterion.trim())) {
-            setCriteria(prev => [...prev, manualCriterion.trim()]);
-            setManualCriterion('');
-        }
-    };
-
-    return (
-        <div className="animate-in max-w-5xl mx-auto min-h-[calc(100vh-6rem)]">
-            {/* Header */}
-            <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                <div className="logo logo-large" style={{ fontSize: '1.8rem' }}>DilemmaWise</div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-
-                {/* TOP SECTION: Structure & Actions */}
-                <div style={{ display: 'flex', flexDirection: 'column', md: { flexDirection: 'row' }, gap: '2rem' }}>
-
-                    {/* Structure Panel */}
-                    <div className="card" style={{ flex: 1, borderTop: '4px solid hsl(var(--primary))' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-                            <h3 style={{ fontSize: '1.2rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <span>🧩</span> Decision Structure
-                            </h3>
-                            <span style={{ fontSize: '0.85rem', padding: '0.2rem 0.6rem', borderRadius: '4px', background: canSubmit ? 'hsl(142 76% 36% / 0.1)' : 'hsl(var(--muted))', color: canSubmit ? 'hsl(142 76% 36%)' : 'hsl(var(--foreground) / 0.6)' }}>
-                                {canSubmit ? '✓ Ready to Continue' : 'Incomplete'}
-                            </span>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem' }}>
-                            {/* Options Column */}
-                            <div>
-                                <h4 style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '0.75rem' }}>options</h4>
-                                <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                    {options.map((opt, i) => (
-                                        <div key={i} className="chip">
-                                            {opt}
-                                            <button onClick={() => handleRemoveOption(opt)} className="chip-remove">×</button>
-                                        </div>
-                                    ))}
-                                    {options.length === 0 && <span style={{ opacity: 0.5, fontStyle: 'italic', fontSize: '0.9rem' }}>No options added yet</span>}
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <input
-                                        type="text"
-                                        className="input"
-                                        placeholder="Add option..."
-                                        value={manualOption}
-                                        onChange={(e) => setManualOption(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleManualAddOption()}
-                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}
-                                    />
-                                    <button onClick={handleManualAddOption} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem' }}>+</button>
-                                </div>
-                            </div>
-
-                            {/* Criteria Column */}
-                            <div>
-                                <h4 style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '0.75rem' }}>criteria</h4>
-                                <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                    {criteria.map((crit, i) => (
-                                        <div key={i} className="chip chip-secondary">
-                                            {crit}
-                                            <button onClick={() => handleRemoveCriterion(crit)} className="chip-remove">×</button>
-                                        </div>
-                                    ))}
-                                    {criteria.length === 0 && <span style={{ opacity: 0.5, fontStyle: 'italic', fontSize: '0.9rem' }}>No criteria added yet</span>}
-                                </div>
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                    <input
-                                        type="text"
-                                        className="input"
-                                        placeholder="Add criterion..."
-                                        value={manualCriterion}
-                                        onChange={(e) => setManualCriterion(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleManualAddCriterion()}
-                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}
-                                    />
-                                    <button onClick={handleManualAddCriterion} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem' }}>+</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Actions Panel (Right Side on Desktop, Bottom on Mobile) */}
-                    <div style={{ minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', height: '100%', background: 'hsl(var(--primary) / 0.05)', border: '1px solid hsl(var(--primary) / 0.1)' }}>
-                            <p style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '1rem' }}>
-                                {canSubmit ? "Structure looks good!" : "Add at least 2 options and 1 criterion."}
-                            </p>
-                            <button
-                                onClick={handleInitialSubmit}
-                                className="btn btn-primary w-full"
-                                disabled={!canSubmit}
-                                style={{ padding: '1rem', fontSize: '1.1rem', boxShadow: '0 4px 12px hsl(var(--primary) / 0.2)' }}
-                            >
-                                Continue →
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* BOTTOM SECTION: Chat Interface */}
-                <div className="card" style={{ height: '500px', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
-                    {/* Chat History */}
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        {messages.map((msg, idx) => (
-                            <div key={idx} className={`chat-message ${msg.role}`}>
-                                <div className="message-bubble">
-                                    {msg.text.split(/\n\n+/).map((paragraph, pIdx) => (
-                                        <p key={pIdx} style={{ marginBottom: pIdx === msg.text.split(/\n\n+/).length - 1 ? 0 : '1.2rem' }}>
-                                            {paragraph.split(/(\[[^\]]+\]\([^)]+\)|\[\[Option:[^\]]+\]\]|\[\[Criterion:[^\]]+\]\])/g).map((part, i) => {
-                                                const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-                                                if (linkMatch) {
-                                                    return (
-                                                        <a
-                                                            key={i} href={linkMatch[2]} target="_blank" rel="noopener noreferrer"
-                                                            style={{ color: msg.role === 'user' ? 'white' : 'hsl(var(--primary))', textDecoration: 'underline', fontWeight: '600' }}
-                                                        >
-                                                            {linkMatch[1]}
-                                                        </a>
-                                                    );
-                                                }
-                                                const optionMatch = part.match(/^\[\[Option:([^\]]+)\]\]$/);
-                                                if (optionMatch) {
-                                                    const name = optionMatch[1];
-                                                    const exists = options.includes(name);
-                                                    return (
-                                                        <button
-                                                            key={i}
-                                                            onClick={() => !exists && setOptions(prev => [...new Set([...prev, name])])}
-                                                            className={`interactive-tag option ${exists ? 'exists' : ''}`}
-                                                        >
-                                                            {exists ? '✓' : '＋'} {name}
-                                                        </button>
-                                                    );
-                                                }
-                                                const criterionMatch = part.match(/^\[\[Criterion:([^\]]+)\]\]$/);
-                                                if (criterionMatch) {
-                                                    const name = criterionMatch[1];
-                                                    const exists = criteria.includes(name);
-                                                    return (
-                                                        <button
-                                                            key={i}
-                                                            onClick={() => !exists && setCriteria(prev => [...new Set([...prev, name])])}
-                                                            className={`interactive-tag criterion ${exists ? 'exists' : ''}`}
-                                                        >
-                                                            {exists ? '✓' : '✨'} {name}
-                                                        </button>
-                                                    );
-                                                }
-                                                return part;
-                                            })}
-                                        </p>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                        {isTyping && (
-                            <div className="chat-message assistant">
-                                <div className="message-bubble typing-indicator">
-                                    <span>•</span><span>•</span><span>•</span>
-                                </div>
+                    <div className="dilemma-card">
+                        <label>What's the core question you're trying to answer?</label>
+                        <p className="helper-text">Keep it simple – just the decision question, not the details yet. We'll ask about options and criteria in the next steps.</p>
+                        <textarea
+                            value={dilemmaInput}
+                            onChange={handleDilemmaInputChange}
+                            placeholder='e.g., "Which phone should I buy?" or "Should I change jobs?"'
+                            rows={3}
+                            autoFocus
+                        />
+                        {inputGuidance && (
+                            <div className="input-guidance">
+                                {inputGuidance}
                             </div>
                         )}
-                        <div ref={messagesEndRef} />
-                    </div>
-
-                    {/* Chat Input */}
-                    <div style={{ padding: '1.5rem', borderTop: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}>
-                        <div style={{ display: 'flex', gap: '0.75rem', maxWidth: '800px', margin: '0 auto' }}>
-                            <input
-                                type="text"
-                                className="input"
-                                value={chatInput}
-                                onChange={(e) => setChatInput(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleChatSubmit()}
-                                placeholder="Describe your dilemma or ask for suggestions..."
-                                style={{ flex: 1, padding: '0.75rem 1rem', fontSize: '1rem' }}
-                                autoFocus
-                            />
-                            <button
-                                onClick={handleChatSubmit}
-                                className="btn btn-primary"
-                                disabled={!chatInput.trim() || isTyping}
-                                style={{ padding: '0 1.5rem' }}
-                            >
-                                <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>↑</span>
-                            </button>
-                        </div>
+                        <button
+                            onClick={handleDilemmaSubmit}
+                            className="btn btn-primary btn-lg"
+                            disabled={!dilemmaInput.trim() || isAnalyzing}
+                        >
+                            {isAnalyzing ? 'Analyzing...' : 'Continue →'}
+                        </button>
                     </div>
                 </div>
-
+                <style jsx>{`
+                    .screen-container {
+                        min-height: 100vh;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        padding: 2rem;
+                        background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--muted)) 100%);
+                    }
+                    .screen-content {
+                        max-width: 600px;
+                        width: 100%;
+                        text-align: center;
+                    }
+                    .brand {
+                        font-size: 3rem;
+                        font-weight: 700;
+                        color: hsl(var(--primary));
+                        margin-bottom: 0.5rem;
+                    }
+                    .subtitle {
+                        font-size: 1.1rem;
+                        color: hsl(var(--foreground) / 0.6);
+                        margin-bottom: 3rem;
+                    }
+                    .dilemma-card {
+                        background: hsl(var(--card));
+                        padding: 2rem;
+                        border-radius: 1rem;
+                        border: 1px solid hsl(var(--border));
+                        box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+                    }
+                    .dilemma-card label {
+                        display: block;
+                        text-align: left;
+                        font-weight: 600;
+                        margin-bottom: 0.75rem;
+                        font-size: 1.1rem;
+                    }
+                    .dilemma-card textarea {
+                        width: 100%;
+                        padding: 1rem;
+                        border-radius: 0.5rem;
+                        border: 1px solid hsl(var(--border));
+                        font-size: 1rem;
+                        resize: none;
+                        margin-bottom: 0.75rem;
+                        background: hsl(var(--background));
+                        color: hsl(var(--foreground));
+                    }
+                    .dilemma-card textarea:focus {
+                        outline: none;
+                        border-color: hsl(var(--primary));
+                        box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
+                    }
+                    .helper-text {
+                        font-size: 0.85rem;
+                        color: hsl(var(--foreground) / 0.6);
+                        margin: -0.25rem 0 1rem;
+                        line-height: 1.4;
+                    }
+                    .input-guidance {
+                        background: hsl(45 90% 95%);
+                        border-left: 3px solid hsl(45 80% 50%);
+                        padding: 0.75rem 1rem;
+                        margin-bottom: 1rem;
+                        border-radius: 0 0.5rem 0.5rem 0;
+                        font-size: 0.9rem;
+                        color: hsl(30 60% 30%);
+                        animation: fadeIn 0.3s ease-out;
+                    }
+                    @keyframes fadeIn {
+                        from { opacity: 0; transform: translateY(-5px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+                    .btn-lg {
+                        width: 100%;
+                        padding: 1rem 2rem;
+                        font-size: 1.1rem;
+                    }
+                `}</style>
             </div>
+        );
+    }
 
+    // ========== SCREENS 2 & 3: OPTIONS / CRITERIA ==========
+    const isOptionsScreen = screen === SCREENS.OPTIONS;
+    const currentItems = isOptionsScreen ? options : criteria;
+    const itemLabel = isOptionsScreen ? 'option' : 'criterion';
+    const canProceed = isOptionsScreen ? options.length >= 2 : criteria.length >= 1;
+
+    return (
+        <div className="screen-container split-screen">
             {/* Confirmation Modal */}
-            {showConfirmation && (
+            {showConfirmModal && (
                 <div className="modal-overlay">
-                    <div className="modal-content animate-in">
-                        {validationResult?.isValid === false ? (
+                    <div className="modal-content">
+                        <h3>{confirmAction === 'criteria' ? '✓ Confirm Your Options' : '✓ Ready to Prioritize?'}</h3>
+
+                        {confirmAction === 'criteria' ? (
                             <>
-                                <h2 style={{ fontSize: '1.4rem', fontWeight: '600', marginBottom: '1rem', color: 'hsl(var(--destructive, 0 84% 60%))' }}>
-                                    ⚠️ Logic Check
-                                </h2>
-                                <p style={{ marginBottom: '1rem', fontSize: '1rem', lineHeight: '1.5' }}>
-                                    {validationResult.warning || "Some criteria might be awkward to rate for certain options."}
-                                </p>
-                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                                    <button onClick={() => setShowConfirmation(false)} className="btn btn-primary">Fix in Chat</button>
-                                    <button onClick={confirmAndProceed} className="btn btn-secondary" style={{ fontSize: '0.9rem' }}>Ignore & Proceed</button>
+                                <p>You've selected {options.length} options to compare:</p>
+                                <div className="modal-items">
+                                    {options.map((opt, i) => (
+                                        <span key={i} className="modal-chip option">{opt}</span>
+                                    ))}
                                 </div>
+                                <p className="modal-note">You won't be able to change these after proceeding.</p>
                             </>
                         ) : (
                             <>
-                                <h2 style={{ fontSize: '1.5rem', fontWeight: '600', marginBottom: '1.5rem' }}>Ready to prioritize?</h2>
-
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <p style={{ marginBottom: '0.75rem', fontSize: '0.9rem', color: 'hsl(var(--foreground) / 0.7)', fontWeight: '500' }}>COMPARING:</p>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                                        {options.map((opt, i) => (
-                                            <span key={i} className="chip">{opt}</span>
-                                        ))}
-                                    </div>
-
-                                    <p style={{ marginBottom: '0.75rem', fontSize: '0.9rem', color: 'hsl(var(--foreground) / 0.7)', fontWeight: '500' }}>BASED ON:</p>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                        {criteria.map((crit, i) => (
-                                            <span key={i} className="chip chip-secondary">{crit}</span>
-                                        ))}
-                                    </div>
+                                <p>You've defined {criteria.length} criteria:</p>
+                                <div className="modal-items">
+                                    {criteria.map((crit, i) => (
+                                        <span key={i} className="modal-chip criterion">{crit}</span>
+                                    ))}
                                 </div>
-
-                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end', marginTop: '2rem' }}>
-                                    <button onClick={() => setShowConfirmation(false)} className="btn btn-secondary">Back to Chat</button>
-                                    <button onClick={confirmAndProceed} className="btn btn-primary">Yes, Let's Go</button>
-                                </div>
+                                <p className="modal-note">Next, you'll rate your options and set priorities.</p>
                             </>
                         )}
+
+                        <div className="modal-actions">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => setShowConfirmModal(false)}
+                            >
+                                Go Back
+                            </button>
+                            <button
+                                className="btn btn-primary"
+                                onClick={confirmAction === 'criteria' ? proceedToCriteria : proceedToFinish}
+                            >
+                                {confirmAction === 'criteria' ? 'Confirm & Continue' : 'Start Prioritizing'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
 
+            {/* Left: Chat */}
+            <div className="chat-section">
+                <div className="chat-header">
+                    <span className="step-badge">{isOptionsScreen ? 'Step 2 of 3' : 'Step 3 of 3'}</span>
+                    <h2>{isOptionsScreen ? 'Define Your Options' : 'Define Your Criterias'}</h2>
+                    <p className="dilemma-display">{coreDilemma}</p>
+                </div>
+
+                <div className="chat-messages">
+                    {messages.map((msg, idx) => (
+                        <div key={idx} className={`chat-message ${msg.role}`}>
+                            <div className="message-bubble">
+                                {msg.text.split(/(\[\[Option:[^\]]+\]\]|\[\[Criterion:[^\]]+\]\])/g).map((part, i) => {
+                                    const optionMatch = part.match(/^\[\[Option:([^\]]+)\]\]$/);
+                                    if (optionMatch) {
+                                        const name = optionMatch[1];
+                                        const exists = options.includes(name) || options.includes(capitalizeFirst(name));
+                                        return (
+                                            <button key={i}
+                                                onClick={() => !exists && setOptions(prev => [...new Set([...prev, capitalizeFirst(name)])])}
+                                                className={`tag-btn option ${exists ? 'added' : ''}`}>
+                                                {exists ? '✓' : '+'} {name}
+                                            </button>
+                                        );
+                                    }
+                                    const criterionMatch = part.match(/^\[\[Criterion:([^\]]+)\]\]$/);
+                                    if (criterionMatch) {
+                                        const name = criterionMatch[1];
+                                        const exists = criteria.includes(name) || criteria.includes(capitalizeFirst(name));
+                                        return (
+                                            <button key={i}
+                                                onClick={() => !exists && setCriteria(prev => [...new Set([...prev, capitalizeFirst(name)])])}
+                                                className={`tag-btn criterion ${exists ? 'added' : ''}`}>
+                                                {exists ? '✓' : '✨'} {name}
+                                            </button>
+                                        );
+                                    }
+                                    return part;
+                                })}
+                            </div>
+                        </div>
+                    ))}
+                    {isTyping && (
+                        <div className="chat-message assistant">
+                            <div className="message-bubble typing">
+                                <span>•</span><span>•</span><span>•</span>
+                            </div>
+                        </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                </div>
+
+                <div className="chat-input-area">
+                    <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleChatSubmit()}
+                        placeholder="Ask for suggestions or tell me more..."
+                    />
+                    <button onClick={handleChatSubmit} className="btn btn-primary" disabled={!chatInput.trim() || isTyping}>
+                        ↑
+                    </button>
+                </div>
+            </div>
+
+            {/* Right: Basket */}
+            <div className="basket-section">
+                <div className="basket-card">
+                    <h3>{isOptionsScreen ? '🎯 Your Options' : '📊 Your Criterias'}</h3>
+                    <p className="basket-hint">
+                        {isOptionsScreen
+                            ? 'Add at least 2 options to compare'
+                            : 'Add at least 1 factor that matters to you'}
+                    </p>
+
+                    <div className="basket-items">
+                        {currentItems.map((item, i) => (
+                            <div key={i} className={`chip ${isOptionsScreen ? 'option' : 'criterion'}`}>
+                                {item}
+                                <button
+                                    onClick={() => isOptionsScreen ? handleRemoveOption(item) : handleRemoveCriterion(item)}
+                                    className="chip-remove">×</button>
+                            </div>
+                        ))}
+                        {currentItems.length === 0 && (
+                            <p className="empty-state">No {itemLabel}s added yet</p>
+                        )}
+                    </div>
+
+                    <div className="manual-add">
+                        <input
+                            type="text"
+                            value={manualInput}
+                            onChange={(e) => setManualInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleManualAdd()}
+                            placeholder={`Add ${itemLabel} manually...`}
+                        />
+                        <button onClick={handleManualAdd} className="btn-add">+</button>
+                    </div>
+                </div>
+
+                <button
+                    onClick={isOptionsScreen ? handleConfirmOptions : handleFinish}
+                    className="btn btn-primary btn-proceed"
+                    disabled={!canProceed}
+                >
+                    {isOptionsScreen ? 'Confirm Options & Continue →' : 'Finish & Continue →'}
+                </button>
+            </div>
+
             <style jsx>{`
-                .chip { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.75rem; background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); border-radius: 999px; font-size: 0.85rem; font-weight: 500; border: 1px solid hsl(var(--primary) / 0.2); }
-                .chip-secondary { background: hsl(280 70% 60% / 0.1); color: hsl(280 70% 60%); border: 1px solid hsl(280 70% 60% / 0.2); }
-                .chip-remove { background: none; border: none; cursor: pointer; font-size: 1rem; opacity: 0.5; padding: 0; display: flex; align-items: center; justify-content: center; width: 14px; height: 14px; transition: opacity 0.2s; }
-                .chip-remove:hover { opacity: 1; }
-                .chat-message { display: flex; margin-bottom: 0.5rem; }
+                .split-screen {
+                    display: grid;
+                    grid-template-columns: 1fr 400px;
+                    height: 100vh;
+                    background: hsl(var(--background));
+                }
+                .chat-section {
+                    display: flex;
+                    flex-direction: column;
+                    border-right: 1px solid hsl(var(--border));
+                }
+                .chat-header {
+                    padding: 1.5rem;
+                    border-bottom: 1px solid hsl(var(--border));
+                    background: hsl(var(--card));
+                }
+                .step-badge {
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    color: hsl(var(--primary));
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                }
+                .chat-header h2 {
+                    font-size: 1.5rem;
+                    font-weight: 700;
+                    margin: 0.25rem 0;
+                }
+                .dilemma-display {
+                    font-size: 0.95rem;
+                    color: hsl(var(--foreground) / 0.7);
+                    margin: 0;
+                }
+                .chat-messages {
+                    flex: 1;
+                    overflow-y: auto;
+                    padding: 1.5rem;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1rem;
+                }
+                .chat-input-area {
+                    padding: 1rem;
+                    border-top: 1px solid hsl(var(--border));
+                    display: flex;
+                    gap: 0.5rem;
+                    background: hsl(var(--card));
+                }
+                .chat-input-area input {
+                    flex: 1;
+                    padding: 0.75rem 1rem;
+                    border-radius: 0.5rem;
+                    border: 1px solid hsl(var(--border));
+                    font-size: 1rem;
+                    background: hsl(var(--background));
+                    color: hsl(var(--foreground));
+                }
+                .chat-input-area input:focus {
+                    outline: none;
+                    border-color: hsl(var(--primary));
+                }
+                .chat-message { display: flex; }
                 .chat-message.user { justify-content: flex-end; }
                 .chat-message.assistant { justify-content: flex-start; }
-                .message-bubble { 
-                    max-width: 85%; padding: 1rem 1.25rem; border-radius: 1.25rem; font-size: 0.95rem; line-height: 1.6; 
-                    box-shadow: 0 1px 2px rgba(0,0,0,0.05); background: hsl(var(--card)); border: 1px solid hsl(var(--border));
+                .message-bubble {
+                    max-width: 85%;
+                    padding: 1rem 1.25rem;
+                    border-radius: 1rem;
+                    font-size: 0.95rem;
+                    line-height: 1.6;
+                    background: hsl(var(--card));
+                    border: 1px solid hsl(var(--border));
                 }
-                .user .message-bubble { background: hsl(var(--primary)); color: white; border-bottom-right-radius: 0.25rem; border: none; }
-                .assistant .message-bubble { border-bottom-left-radius: 0.25rem; }
-                .interactive-tag {
-                    display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; padding: 2px 8px; margin: 0 2px;
-                    font-size: 0.95em; font-weight: 600; cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
-                    vertical-align: baseline;
+                .user .message-bubble {
+                    background: hsl(var(--primary));
+                    color: white;
+                    border: none;
                 }
-                .interactive-tag.option { background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); border-color: hsl(var(--primary) / 0.2); }
-                .interactive-tag.criterion { background: hsl(var(--secondary) / 0.1); color: hsl(var(--secondary)); border-color: hsl(var(--secondary) / 0.2); }
-                .interactive-tag.exists { background: hsl(var(--muted)); color: hsl(var(--foreground) / 0.4); border-color: hsl(var(--border)); cursor: default; }
-                .typing-indicator span { animation: blink 1.4s infinite both; margin: 0 1px; font-size: 1.5rem; }
-                .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-                .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+                .tag-btn {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    padding: 2px 8px;
+                    margin: 0 3px;
+                    border-radius: 4px;
+                    font-size: 0.9em;
+                    font-weight: 600;
+                    cursor: pointer;
+                    border: 1px solid;
+                    transition: all 0.15s;
+                }
+                .tag-btn.option {
+                    background: hsl(var(--primary) / 0.1);
+                    color: hsl(var(--primary));
+                    border-color: hsl(var(--primary) / 0.2);
+                }
+                .tag-btn.criterion {
+                    background: hsl(280 70% 60% / 0.1);
+                    color: hsl(280 70% 60%);
+                    border-color: hsl(280 70% 60% / 0.2);
+                }
+                .tag-btn.added {
+                    background: hsl(var(--muted));
+                    color: hsl(var(--foreground) / 0.4);
+                    border-color: hsl(var(--border));
+                    cursor: default;
+                }
+                .tag-btn:not(.added):hover {
+                    transform: scale(1.05);
+                }
+                .typing span {
+                    animation: blink 1.4s infinite both;
+                    margin: 0 2px;
+                    font-size: 1.5rem;
+                }
+                .typing span:nth-child(2) { animation-delay: 0.2s; }
+                .typing span:nth-child(3) { animation-delay: 0.4s; }
                 @keyframes blink { 0% { opacity: 0.2; } 20% { opacity: 1; } 100% { opacity: 0.2; } }
-                .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
-                .modal-content { background: hsl(var(--card)); padding: 2rem; border-radius: 1rem; max-width: 500px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.1); border: 1px solid hsl(var(--border)); }
-                @media (min-width: 768px) {
-                    .md\:flex-row { flexDirection: row; }
+
+                .basket-section {
+                    padding: 1.5rem;
+                    display: flex;
+                    flex-direction: column;
+                    background: hsl(var(--muted) / 0.3);
+                }
+                .basket-card {
+                    flex: 1;
+                    background: hsl(var(--card));
+                    border-radius: 1rem;
+                    padding: 1.5rem;
+                    border: 1px solid hsl(var(--border));
+                }
+                .basket-card h3 {
+                    font-size: 1.2rem;
+                    margin-bottom: 0.5rem;
+                }
+                .basket-hint {
+                    font-size: 0.85rem;
+                    color: hsl(var(--foreground) / 0.6);
+                    margin-bottom: 1.5rem;
+                }
+                .basket-items {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.5rem;
+                    min-height: 100px;
+                    margin-bottom: 1rem;
+                }
+                .empty-state {
+                    font-size: 0.9rem;
+                    color: hsl(var(--foreground) / 0.4);
+                    font-style: italic;
+                }
+                .chip {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    padding: 0.4rem 0.8rem;
+                    border-radius: 999px;
+                    font-size: 0.9rem;
+                    font-weight: 500;
+                }
+                .chip.option {
+                    background: hsl(var(--primary) / 0.1);
+                    color: hsl(var(--primary));
+                    border: 1px solid hsl(var(--primary) / 0.2);
+                }
+                .chip.criterion {
+                    background: hsl(280 70% 60% / 0.1);
+                    color: hsl(280 70% 60%);
+                    border: 1px solid hsl(280 70% 60% / 0.2);
+                }
+                .chip-remove {
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    opacity: 0.5;
+                    font-size: 1rem;
+                    line-height: 1;
+                }
+                .chip-remove:hover { opacity: 1; }
+                .manual-add {
+                    display: flex;
+                    gap: 0.5rem;
+                }
+                .manual-add input {
+                    flex: 1;
+                    padding: 0.6rem 0.8rem;
+                    border-radius: 0.5rem;
+                    border: 1px solid hsl(var(--border));
+                    font-size: 0.9rem;
+                    background: hsl(var(--background));
+                    color: hsl(var(--foreground));
+                }
+                .btn-add {
+                    padding: 0.6rem 1rem;
+                    border-radius: 0.5rem;
+                    border: 1px solid hsl(var(--border));
+                    background: hsl(var(--secondary));
+                    cursor: pointer;
+                    font-size: 1rem;
+                }
+                .btn-proceed {
+                    margin-top: 1rem;
+                    width: 100%;
+                    padding: 1rem;
+                }
+
+                /* Modal Styles */
+                .modal-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.5);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 1000;
+                    backdrop-filter: blur(4px);
+                }
+                .modal-content {
+                    background: hsl(var(--card));
+                    border-radius: 1rem;
+                    padding: 2rem;
+                    max-width: 500px;
+                    width: 90%;
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+                    border: 1px solid hsl(var(--border));
+                }
+                .modal-content h3 {
+                    font-size: 1.4rem;
+                    margin-bottom: 1rem;
+                    color: hsl(var(--foreground));
+                }
+                .modal-content p {
+                    color: hsl(var(--foreground) / 0.8);
+                    margin-bottom: 0.75rem;
+                }
+                .modal-items {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.5rem;
+                    margin: 1rem 0;
+                }
+                .modal-chip {
+                    padding: 0.4rem 0.8rem;
+                    border-radius: 999px;
+                    font-size: 0.9rem;
+                    font-weight: 500;
+                }
+                .modal-chip.option {
+                    background: hsl(var(--primary) / 0.15);
+                    color: hsl(var(--primary));
+                    border: 1px solid hsl(var(--primary) / 0.3);
+                }
+                .modal-chip.criterion {
+                    background: hsl(280 70% 60% / 0.15);
+                    color: hsl(280 70% 60%);
+                    border: 1px solid hsl(280 70% 60% / 0.3);
+                }
+                .modal-note {
+                    font-size: 0.85rem;
+                    color: hsl(var(--foreground) / 0.6);
+                    font-style: italic;
+                }
+                .modal-actions {
+                    display: flex;
+                    gap: 1rem;
+                    margin-top: 1.5rem;
+                    justify-content: flex-end;
+                }
+                .btn-secondary {
+                    padding: 0.75rem 1.5rem;
+                    border-radius: 0.5rem;
+                    border: 1px solid hsl(var(--border));
+                    background: hsl(var(--secondary));
+                    color: hsl(var(--foreground));
+                    cursor: pointer;
+                    font-size: 0.95rem;
+                }
+                .btn-secondary:hover {
+                    background: hsl(var(--muted));
+                }
+
+                @media (max-width: 900px) {
+                    .split-screen {
+                        grid-template-columns: 1fr;
+                        grid-template-rows: 1fr auto;
+                    }
+                    .basket-section {
+                        max-height: 40vh;
+                        overflow-y: auto;
+                    }
                 }
             `}</style>
         </div>

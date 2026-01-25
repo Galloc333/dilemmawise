@@ -63,24 +63,39 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
                                     {criterion}
                                     <span style={{ fontSize: '0.8rem', opacity: 0.5 }}>ℹ️</span>
                                 </span>
-                                <span className="slider-value">
+                                <span className="slider-value-label">
                                     {getImportanceLabel(weights[criterion])}
                                 </span>
                             </div>
 
-                            <input
-                                type="range"
-                                min="1"
-                                max="10"
-                                value={weights[criterion]}
-                                onChange={(e) => handleWeightChange(criterion, e.target.value)}
-                            />
+                            {/* Custom slider with value inside thumb */}
+                            <div className="custom-slider-wrapper">
+                                <input
+                                    type="range"
+                                    min="1"
+                                    max="10"
+                                    value={weights[criterion]}
+                                    onChange={(e) => handleWeightChange(criterion, e.target.value)}
+                                    className="custom-slider"
+                                />
+                                <div
+                                    className="slider-thumb-value"
+                                    style={{ left: `calc(${(weights[criterion] - 1) / 9 * 100}% - ${(weights[criterion] - 1) / 9 * 36}px + 18px)` }}
+                                >
+                                    {weights[criterion]}
+                                </div>
+                            </div>
+
+                            <div className="slider-scale">
+                                <span>1 - Care very little</span>
+                                <span>10 - Care a lot</span>
+                            </div>
 
                             {/* Tooltip */}
                             {hoveredCriterion === criterion && explanations[criterion] && (
                                 <div className="tooltip-custom animate-in">
                                     <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: 'hsl(var(--primary))' }}>
-                                        Why weigh this High?
+                                        How important is {criterion}?
                                     </div>
                                     {explanations[criterion]}
                                 </div>
@@ -96,6 +111,77 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
             </div>
 
             <style jsx>{`
+                .slider-container {
+                    position: relative;
+                    margin-bottom: 1.5rem;
+                    padding-bottom: 0.5rem;
+                }
+                .slider-label {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 0.5rem;
+                }
+                .slider-value-label {
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    color: hsl(var(--primary));
+                }
+                .custom-slider-wrapper {
+                    position: relative;
+                    padding: 10px 0;
+                }
+                .custom-slider {
+                    width: 100%;
+                    height: 8px;
+                    -webkit-appearance: none;
+                    appearance: none;
+                    background: hsl(var(--muted));
+                    border-radius: 4px;
+                    outline: none;
+                }
+                .custom-slider::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 50%;
+                    background: hsl(var(--primary));
+                    cursor: pointer;
+                    border: 3px solid white;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                }
+                .custom-slider::-moz-range-thumb {
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 50%;
+                    background: hsl(var(--primary));
+                    cursor: pointer;
+                    border: 3px solid white;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                }
+                .slider-thumb-value {
+                    position: absolute;
+                    top: 50%;
+                    transform: translate(-50%, -50%);
+                    width: 36px;
+                    height: 36px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 0.85rem;
+                    font-weight: 700;
+                    color: white;
+                    pointer-events: none;
+                    z-index: 5;
+                }
+                .slider-scale {
+                    display: flex;
+                    justify-content: space-between;
+                    font-size: 0.75rem;
+                    color: hsl(var(--foreground) / 0.5);
+                    margin-top: 0.25rem;
+                }
                 .tooltip-custom {
                     position: absolute;
                     left: 100%;
@@ -106,12 +192,12 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
                     border: 1px solid hsl(var(--primary) / 0.3);
                     padding: 1rem;
                     border-radius: 0.75rem;
-                    width: 250px;
+                    width: 280px;
                     box-shadow: 0 10px 30px rgba(0,0,0,0.15);
                     z-index: 10;
                     pointer-events: none;
                     font-size: 0.9rem;
-                    line-height: 1.4;
+                    line-height: 1.5;
                 }
                 .tooltip-custom::before {
                     content: '';
@@ -122,9 +208,6 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
                     border-width: 8px;
                     border-style: solid;
                     border-color: transparent hsl(var(--primary) / 0.3) transparent transparent;
-                }
-                .slider-container {
-                    position: relative; /* Context for tooltip positioning if needed, though I used fixed width offset */
                 }
                 @media (max-width: 800px) {
                     .tooltip-custom {

@@ -1,4 +1,4 @@
-import { model } from "@/lib/gemini";
+import { generateWithRetry } from "@/lib/gemini";
 import { NextResponse } from "next/server";
 
 const ELICITATION_SYSTEM_PROMPT = `You are a decision-support assistant helping the user compare options across criteria through evidence-based elicitation.
@@ -116,7 +116,7 @@ export async function POST(request) {
             ...conversation.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
         ];
 
-        const result = await model.generateContent(conversationParts.join("\n\n"));
+        const result = await generateWithRetry(conversationParts.join("\n\n"));
         let responseText = result.response.text();
 
         // Parse the JSON response

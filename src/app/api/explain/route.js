@@ -1,4 +1,4 @@
-import { model } from "@/lib/gemini";
+import { generateWithRetry } from "@/lib/gemini";
 import { NextResponse } from "next/server";
 
 const EXPLAIN_PROMPT = `You are an AI that explains decision analysis results in a clear, structured, and human-friendly way.
@@ -79,7 +79,7 @@ export async function POST(request) {
             .replace("{weights}", JSON.stringify(weights))
             .replace("{scores}", JSON.stringify(scores));
 
-        const result = await model.generateContent(prompt);
+        const result = await generateWithRetry(prompt);
         const responseText = result.response.text();
 
         try {

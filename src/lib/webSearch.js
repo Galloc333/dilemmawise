@@ -1,4 +1,4 @@
-import { model, parseJsonFromResponse } from "@/lib/gemini";
+import { generateWithRetry, parseJsonFromResponse } from "@/lib/gemini";
 
 /**
  * Performs a web search (or simulation) for valid queries.
@@ -52,7 +52,7 @@ Output JSON Format:
 ]`;
 
     try {
-        const result = await model.generateContent(SEARCH_SIMULATION_PROMPT);
+        const result = await generateWithRetry(SEARCH_SIMULATION_PROMPT);
         const text = result.response.text();
         return parseJsonFromResponse(text) || [];
     } catch (geminiError) {

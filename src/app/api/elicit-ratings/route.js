@@ -1,4 +1,4 @@
-import { model, parseJsonFromResponse } from "@/lib/gemini";
+import { generateWithRetry, parseJsonFromResponse } from "@/lib/gemini";
 import { performWebSearch } from "@/lib/webSearch";
 import { NextResponse } from "next/server";
 
@@ -125,19 +125,36 @@ async function enrichQuestionsWithFacts(questions, options, criteria, context = 
                     
                     Provide a JSON object ONLY:
                     { 
-                      "chart_title": "Comparison of [Numeric Metric]",
-                      "chart_data": [{ "label": "Option Name", "value": number, "unit": "..." }], 
+                      "charts": [
+                        {
+                          "chart_type": "bar" | "comparison_table" | "scale" | "pie" | "none",
+                          "chart_title": "Title describing the metric",
+                          "chart_data": [{ "label": "Option Name", "value": number, "unit": "..." }]
+                        }
+                      ],
                       "takeaway": "Direct explanation of how these options perform FOR THIS USER'S SPECIFIC NEEDS. Use 2nd person.",
                       "bullet_points": ["fact 1", "fact 2", "fact 3"]
                     }
-                    Rules:
-                    1. NUMERIC CHARTS ONLY: Only create chart_data if you have actual numeric values for the SAME metric across options.
-                    2. NO QUALITATIVE CHARTS: NEVER use bar charts to compare adjectives (e.g., do NOT compare "Fast-paced" vs "Relaxed" in a chart).
-                    3. BE SPECIFIC to the User Intent. If they mentioned jazz, find jazz venues.
-                    4. STRICT LIMIT: exactly 3 bullet points.
-                    5. VOICE: Speak directly to the user.`;
+                    
+                    CHART RULES:
+                    1. CHOOSE THE RIGHT CHART TYPE:
+                       - "bar": For comparing numeric values (prices, speeds, ratings)
+                       - "comparison_table": For comparing 2-3 attributes side by side
+                       - "scale": For showing where options fall on a spectrum (e.g., battery life: short to long)
+                       - "pie": For showing proportions or percentages
+                       - "none": When data is qualitative or doesn't benefit from visualization
+                    
+                    2. MULTIPLE CHARTS (up to 3): Only include multiple charts if the criterion is broad and different aspects need different visualizations. Most criteria need just 1 chart. Don't overload the user.
+                    
+                    3. NUMERIC DATA ONLY: Only create charts if you have actual numeric values. Never chart qualitative adjectives.
+                    
+                    4. BE SPECIFIC to the User Intent.
+                    
+                    5. STRICT LIMIT: exactly 3 bullet points.
+                    
+                    6. VOICE: Speak directly to the user.`;
 
-                    const summaryResult = await model.generateContent(SYNTHESIS_PROMPT);
+                    const summaryResult = await generateWithRetry(SYNTHESIS_PROMPT);
                     const data = parseJsonFromResponse(summaryResult.response.text());
 
                     return {
@@ -145,8 +162,11 @@ async function enrichQuestionsWithFacts(questions, options, criteria, context = 
                         webFacts: data ? {
                             summary: data.bullet_points?.map(b => `- ${b}`).join('\n') || '',
                             takeaway: data.takeaway,
-                            chartData: data.chart_data,
-                            chartTitle: data.chart_title,
+                            charts: data.charts || (data.chart_data ? [{
+                                chart_type: 'bar',
+                                chart_title: data.chart_title,
+                                chart_data: data.chart_data
+                            }] : []),
                             sources: results.map(r => ({ title: r.title, url: r.url }))
                         } : {
                             summary: results[0].snippet,
@@ -169,7 +189,7 @@ export async function POST(request) {
                 return NextResponse.json({ needs_more_context: false });
             }
             const prompt = `Dilemma Question: "${dilemma || description}"\nInitial Description: "${description}"\nOptions: ${JSON.stringify(options)}\nCriteria: ${JSON.stringify(criteria)}`;
-            const result = await model.generateContent([{ text: CONTEXT_ANALYSIS_PROMPT }, { text: prompt }]);
+            const result = await generateWithRetry([{ text: CONTEXT_ANALYSIS_PROMPT }, { text: prompt }]);
             const data = parseJsonFromResponse(result.response.text());
 
             if (data && data.questions && data.already_known_context) {
@@ -183,7 +203,7 @@ export async function POST(request) {
         if (mode === 'generate_questions') {
             const budget = calculateQuestionBudget(criteria.length, options.length);
             const prompt = `Core Dilemma: "${dilemma || description}"\nHistory/Description: "${description}"\nOptions: ${JSON.stringify(options)}\nCriteria: ${JSON.stringify(criteria)}\nContext: ${JSON.stringify(context || {})}`;
-            const result = await model.generateContent([
+            const result = await generateWithRetry([
                 { text: QUESTION_GENERATION_PROMPT.replace('{budget}', budget) },
                 { text: prompt }
             ]);
@@ -205,7 +225,7 @@ export async function POST(request) {
             Criteria: ${JSON.stringify(criteria)}
             User Responses (JSON): ${JSON.stringify(responses, null, 2)}`;
 
-            const result = await model.generateContent([{ text: INFERENCE_PROMPT }, { text: prompt }]);
+            const result = await generateWithRetry([{ text: INFERENCE_PROMPT }, { text: prompt }]);
             const inference = parseJsonFromResponse(result.response.text());
 
             const ratings = {};

@@ -10,7 +10,8 @@ export default function Home() {
     const [phase, setPhase] = useState('input');
     const [data, setData] = useState({
         options: [],
-        criteria: []
+        criteria: [],
+        userContext: {}
     });
     const [weights, setWeights] = useState({});
     const [savedScores, setSavedScores] = useState(null);
@@ -61,7 +62,7 @@ export default function Home() {
 
     const handleReset = () => {
         setPhase('input');
-        setData({ options: [], criteria: [] });
+        setData({ options: [], criteria: [], userContext: {} });
         setWeights({});
         setSavedScores(null);
         setSavedDescription('');
@@ -142,6 +143,7 @@ export default function Home() {
                         weights={weights}
                         savedDescription={savedDescription}
                         dilemma={dilemma}
+                        userContext={data.userContext || {}}
                         onComplete={handleAnalyze}
                         onBack={() => setPhase('criteria')}
                     />
