@@ -108,83 +108,124 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
         onNext({ options, criteria }, description, coreDilemma);
     };
 
+    // Manual Input State
+    const [manualOption, setManualOption] = useState('');
+    const [manualCriterion, setManualCriterion] = useState('');
+
+    const handleManualAddOption = () => {
+        if (manualOption.trim() && !options.includes(manualOption.trim())) {
+            setOptions(prev => [...prev, manualOption.trim()]);
+            setManualOption('');
+        }
+    };
+
+    const handleManualAddCriterion = () => {
+        if (manualCriterion.trim() && !criteria.includes(manualCriterion.trim())) {
+            setCriteria(prev => [...prev, manualCriterion.trim()]);
+            setManualCriterion('');
+        }
+    };
+
     return (
-        <div className="animate-in max-w-6xl mx-auto h-[calc(100vh-8rem)] min-h-[500px]">
+        <div className="animate-in max-w-5xl mx-auto min-h-[calc(100vh-6rem)]">
             {/* Header */}
             <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
                 <div className="logo logo-large" style={{ fontSize: '1.8rem' }}>DilemmaWise</div>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6 h-full">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
 
-                {/* Left Panel: Decision Structure */}
-                <div className="card md:col-span-1" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', borderRight: '1px solid hsl(var(--border))' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span>🧩</span> Structure
-                        </h3>
-                        <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>{canSubmit ? 'Ready' : 'Incomplete'}</span>
-                    </div>
+                {/* TOP SECTION: Structure & Actions */}
+                <div style={{ display: 'flex', flexDirection: 'column', md: { flexDirection: 'row' }, gap: '2rem' }}>
 
-                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        <div>
-                            <h4 style={{ fontSize: '0.85rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '0.75rem' }}>
-                                Options
-                            </h4>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                {options.length === 0 && <span style={{ fontSize: '0.85rem', color: 'hsl(var(--foreground) / 0.4)', fontStyle: 'italic' }}>None yet</span>}
-                                {options.map((opt, i) => (
-                                    <div key={i} className="chip">
-                                        {opt}
-                                        <button onClick={() => handleRemoveOption(opt)} className="chip-remove">×</button>
-                                    </div>
-                                ))}
-                            </div>
+                    {/* Structure Panel */}
+                    <div className="card" style={{ flex: 1, borderTop: '4px solid hsl(var(--primary))' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span>🧩</span> Decision Structure
+                            </h3>
+                            <span style={{ fontSize: '0.85rem', padding: '0.2rem 0.6rem', borderRadius: '4px', background: canSubmit ? 'hsl(142 76% 36% / 0.1)' : 'hsl(var(--muted))', color: canSubmit ? 'hsl(142 76% 36%)' : 'hsl(var(--foreground) / 0.6)' }}>
+                                {canSubmit ? '✓ Ready to Continue' : 'Incomplete'}
+                            </span>
                         </div>
 
-                        <div>
-                            <h4 style={{ fontSize: '0.85rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '0.75rem' }}>
-                                Criteria
-                            </h4>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                {criteria.length === 0 && <span style={{ fontSize: '0.85rem', color: 'hsl(var(--foreground) / 0.4)', fontStyle: 'italic' }}>None yet</span>}
-                                {criteria.map((crit, i) => (
-                                    <div key={i} className="chip chip-secondary">
-                                        {crit}
-                                        <button onClick={() => handleRemoveCriterion(crit)} className="chip-remove">×</button>
-                                    </div>
-                                ))}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '2rem' }}>
+                            {/* Options Column */}
+                            <div>
+                                <h4 style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '0.75rem' }}>options</h4>
+                                <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    {options.map((opt, i) => (
+                                        <div key={i} className="chip">
+                                            {opt}
+                                            <button onClick={() => handleRemoveOption(opt)} className="chip-remove">×</button>
+                                        </div>
+                                    ))}
+                                    {options.length === 0 && <span style={{ opacity: 0.5, fontStyle: 'italic', fontSize: '0.9rem' }}>No options added yet</span>}
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input
+                                        type="text"
+                                        className="input"
+                                        placeholder="Add option..."
+                                        value={manualOption}
+                                        onChange={(e) => setManualOption(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleManualAddOption()}
+                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}
+                                    />
+                                    <button onClick={handleManualAddOption} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem' }}>+</button>
+                                </div>
+                            </div>
+
+                            {/* Criteria Column */}
+                            <div>
+                                <h4 style={{ fontSize: '0.9rem', fontWeight: 'bold', textTransform: 'uppercase', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '0.75rem' }}>criteria</h4>
+                                <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    {criteria.map((crit, i) => (
+                                        <div key={i} className="chip chip-secondary">
+                                            {crit}
+                                            <button onClick={() => handleRemoveCriterion(crit)} className="chip-remove">×</button>
+                                        </div>
+                                    ))}
+                                    {criteria.length === 0 && <span style={{ opacity: 0.5, fontStyle: 'italic', fontSize: '0.9rem' }}>No criteria added yet</span>}
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input
+                                        type="text"
+                                        className="input"
+                                        placeholder="Add criterion..."
+                                        value={manualCriterion}
+                                        onChange={(e) => setManualCriterion(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleManualAddCriterion()}
+                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}
+                                    />
+                                    <button onClick={handleManualAddCriterion} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem' }}>+</button>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div style={{ paddingTop: '1rem', borderTop: '1px solid hsl(var(--border))' }}>
-                        {!canSubmit ? (
-                            <div style={{ fontSize: '0.85rem', color: 'hsl(var(--foreground) / 0.6)', marginBottom: '1rem', padding: '0.75rem', background: 'hsl(var(--foreground) / 0.05)', borderRadius: '0.5rem' }}>
-                                <strong>Missing info:</strong>
-                                <ul style={{ marginLeft: '1.25rem', marginTop: '0.25rem', listStyleType: 'disc' }}>
-                                    {options.length < 2 && <li>At least 2 options</li>}
-                                    {criteria.length < 1 && <li>At least 1 criterion</li>}
-                                </ul>
-                            </div>
-                        ) : null}
-
-                        <button
-                            onClick={handleInitialSubmit}
-                            className="btn btn-primary w-full"
-                            disabled={!canSubmit}
-                            style={{ padding: '0.75rem' }}
-                        >
-                            Continue →
-                        </button>
+                    {/* Actions Panel (Right Side on Desktop, Bottom on Mobile) */}
+                    <div style={{ minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', height: '100%', background: 'hsl(var(--primary) / 0.05)', border: '1px solid hsl(var(--primary) / 0.1)' }}>
+                            <p style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '1rem' }}>
+                                {canSubmit ? "Structure looks good!" : "Add at least 2 options and 1 criterion."}
+                            </p>
+                            <button
+                                onClick={handleInitialSubmit}
+                                className="btn btn-primary w-full"
+                                disabled={!canSubmit}
+                                style={{ padding: '1rem', fontSize: '1.1rem', boxShadow: '0 4px 12px hsl(var(--primary) / 0.2)' }}
+                            >
+                                Continue →
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                {/* Right Panel: Chat Interface */}
-                <div className="card md:col-span-2" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 0, overflow: 'hidden' }}>
-
+                {/* BOTTOM SECTION: Chat Interface */}
+                <div className="card" style={{ height: '500px', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
                     {/* Chat History */}
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                         {messages.map((msg, idx) => (
                             <div key={idx} className={`chat-message ${msg.role}`}>
                                 <div className="message-bubble">
@@ -248,24 +289,25 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                     </div>
 
                     {/* Chat Input */}
-                    <div style={{ padding: '1rem', borderTop: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}>
-                        <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <div style={{ padding: '1.5rem', borderTop: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }}>
+                        <div style={{ display: 'flex', gap: '0.75rem', maxWidth: '800px', margin: '0 auto' }}>
                             <input
                                 type="text"
                                 className="input"
                                 value={chatInput}
                                 onChange={(e) => setChatInput(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleChatSubmit()}
-                                placeholder="Type your message..."
-                                style={{ flex: 1 }}
+                                placeholder="Describe your dilemma or ask for suggestions..."
+                                style={{ flex: 1, padding: '0.75rem 1rem', fontSize: '1rem' }}
                                 autoFocus
                             />
                             <button
                                 onClick={handleChatSubmit}
                                 className="btn btn-primary"
                                 disabled={!chatInput.trim() || isTyping}
+                                style={{ padding: '0 1.5rem' }}
                             >
-                                <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>↑</span>
+                                <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>↑</span>
                             </button>
                         </div>
                     </div>
@@ -348,8 +390,9 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                 @keyframes blink { 0% { opacity: 0.2; } 20% { opacity: 1; } 100% { opacity: 0.2; } }
                 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
                 .modal-content { background: hsl(var(--card)); padding: 2rem; border-radius: 1rem; max-width: 500px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,0.1); border: 1px solid hsl(var(--border)); }
-                .grid { display: grid; }
-                @media (min-width: 768px) { .md\:grid-cols-3 { grid-template-columns: repeat(3, 1fr); } .md\:col-span-1 { grid-column: span 1; } .md\:col-span-2 { grid-column: span 2; } }
+                @media (min-width: 768px) {
+                    .md\:flex-row { flexDirection: row; }
+                }
             `}</style>
         </div>
     );
