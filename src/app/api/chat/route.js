@@ -11,6 +11,12 @@ Current State:
 
 WORKFLOW RULES (Follow strictly):
 
+FAST TRACK / FULL CONTEXT:
+- If the user provides a FULL dilemma description (contains BOTH specific Options AND desired Criteria/Concerns), SKIP the phases.
+- Extract ALL Options and Criteria immediately into the JSON block.
+- In your response, explicitly say: "I see you've already thought through your options and criteria, so I've added them for you. Feel free to tweak them, add more manually, or consult with me to refine the structure."
+
+NORMAL PHASED FLOW (If info is partial):
 PHASE 1: DEFINE OPTIONS
 - If "Options" are empty or few, your ONLY goal is to elicit concrete options.
 - ask the user to list their options or use web search to suggest specific models/choices if they ask for help.
@@ -121,9 +127,13 @@ export async function POST(request) {
         const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
         if (jsonMatch) {
             try {
+                const cleanItem = (item) => {
+                    return item.replace(/\[\[(Option|Criterion):/i, '').replace(/\]\]/g, '').trim();
+                };
+
                 const data = JSON.parse(jsonMatch[1]);
-                suggestedOptions = data.newlySuggestedOptions || [];
-                suggestedCriteria = data.newlySuggestedCriteria || [];
+                suggestedOptions = (data.newlySuggestedOptions || []).map(cleanItem);
+                suggestedCriteria = (data.newlySuggestedCriteria || []).map(cleanItem);
                 if (data.coreDilemma) extractedDilemma = data.coreDilemma;
                 responseText = responseText.replace(jsonMatch[0], '').trim();
             } catch (e) {

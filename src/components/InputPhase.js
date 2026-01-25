@@ -67,7 +67,13 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
             if (data.coreDilemma) setCoreDilemma(data.coreDilemma);
 
-            // Automatic additions disabled - user must click tags inline
+            // AUTO-POPULATE: If API returns highly confident suggestions (e.g. from full text), add them
+            if (data.suggestedOptions && data.suggestedOptions.length > 0) {
+                setOptions(prev => [...new Set([...prev, ...data.suggestedOptions])]);
+            }
+            if (data.suggestedCriteria && data.suggestedCriteria.length > 0) {
+                setCriteria(prev => [...new Set([...prev, ...data.suggestedCriteria])]);
+            }
         } catch (error) {
             console.error("Chat error:", error);
             setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I had trouble connecting. Please try again." }]);
