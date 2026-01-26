@@ -1,8 +1,14 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, ArrowRight, Info, HelpCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Slider } from '@/components/ui/slider';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }) {
-    // Use saved weights if provided, otherwise default to 3 (Medium)
     const [weights, setWeights] = useState(
         criteria.reduce((acc, c) => ({ ...acc, [c]: savedWeights?.[c] ?? 5 }), {})
     );
@@ -11,7 +17,7 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
     const [hoveredCriterion, setHoveredCriterion] = useState(null);
 
     // Fetch AI explanations on mount
-    useState(() => {
+    useEffect(() => {
         const fetchExplanations = async () => {
             try {
                 const res = await fetch('/api/explain-criteria', {
@@ -30,10 +36,10 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
             }
         };
         fetchExplanations();
-    }, [criteria]); // Run only when criteria list changes
+    }, [criteria]);
 
     const handleWeightChange = (criterion, value) => {
-        setWeights(prev => ({ ...prev, [criterion]: parseInt(value) }));
+        setWeights(prev => ({ ...prev, [criterion]: value[0] }));
     };
 
     const getImportanceLabel = (value) => {
@@ -44,187 +50,157 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
         return 'Critical';
     };
 
+    const getImportanceColor = (value) => {
+        if (value <= 2) return 'text-muted-foreground';
+        if (value <= 4) return 'text-muted-foreground';
+        if (value <= 6) return 'text-foreground';
+        if (value <= 8) return 'text-primary';
+        return 'text-primary font-bold';
+    };
+
     return (
-        <div className="animate-in">
-            <div className="phase-header">
-                <h1>Prioritize Your Criteria</h1>
-                <p>How important is each factor in your decision?</p>
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="max-w-2xl mx-auto"
+        >
+            {/* Header */}
+            <div className="text-center mb-8">
+                <h1 className="text-3xl font-semibold text-foreground mb-2">
+                    Prioritize Your Criteria
+                </h1>
+                <p className="text-muted-foreground">
+                    How important is each factor in your decision? Slide to set priorities.
+                </p>
             </div>
 
-            <div className="max-w-2xl mx-auto relative">
-                <div className="card" style={{ marginBottom: '2rem' }}>
-                    {criteria.map((criterion) => (
-                        <div key={criterion} className="slider-container"
+            {/* Criteria Sliders */}
+            <Card className="p-6 mb-6">
+                <div className="space-y-8">
+                    {criteria.map((criterion, index) => (
+                        <motion.div
+                            key={criterion}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.1 }}
+                            className="group relative"
                             onMouseEnter={() => setHoveredCriterion(criterion)}
-                            onMouseLeave={() => setHoveredCriterion(null)}>
-
-                            <div className="slider-label">
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'help' }}>
-                                    {criterion}
-                                    <span style={{ fontSize: '0.8rem', opacity: 0.5 }}>ℹ️</span>
-                                </span>
-                                <span className="slider-value-label">
-                                    {getImportanceLabel(weights[criterion])}
-                                </span>
-                            </div>
-
-                            {/* Custom slider with value inside thumb */}
-                            <div className="custom-slider-wrapper">
-                                <input
-                                    type="range"
-                                    min="1"
-                                    max="10"
-                                    value={weights[criterion]}
-                                    onChange={(e) => handleWeightChange(criterion, e.target.value)}
-                                    className="custom-slider"
-                                />
-                                <div
-                                    className="slider-thumb-value"
-                                    style={{ left: `calc(${(weights[criterion] - 1) / 9 * 100}% - ${(weights[criterion] - 1) / 9 * 36}px + 18px)` }}
-                                >
-                                    {weights[criterion]}
+                            onMouseLeave={() => setHoveredCriterion(null)}
+                        >
+                            {/* Label Row */}
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-medium text-foreground">
+                                        {criterion}
+                                    </span>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <button className="text-muted-foreground hover:text-foreground transition-colors">
+                                                <HelpCircle className="h-4 w-4" />
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="max-w-xs">
+                                            {loadingExplanations ? (
+                                                <span className="text-muted-foreground">Loading...</span>
+                                            ) : explanations[criterion] ? (
+                                                <>
+                                                    <p className="font-medium text-primary mb-1">
+                                                        How important is {criterion}?
+                                                    </p>
+                                                    <p>{explanations[criterion]}</p>
+                                                </>
+                                            ) : (
+                                                <span>Consider how much this factor affects your decision.</span>
+                                            )}
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <span className={cn(
+                                        "text-sm font-semibold transition-colors",
+                                        getImportanceColor(weights[criterion])
+                                    )}>
+                                        {getImportanceLabel(weights[criterion])}
+                                    </span>
+                                    <span className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                                        {weights[criterion]}
+                                    </span>
                                 </div>
                             </div>
 
-                            <div className="slider-scale">
+                            {/* Slider */}
+                            <div className="px-1">
+                                <Slider
+                                    value={[weights[criterion]]}
+                                    onValueChange={(value) => handleWeightChange(criterion, value)}
+                                    min={1}
+                                    max={10}
+                                    step={1}
+                                    className="w-full"
+                                />
+                            </div>
+
+                            {/* Scale Labels */}
+                            <div className="flex justify-between mt-2 text-xs text-muted-foreground">
                                 <span>1 - Care very little</span>
                                 <span>10 - Care a lot</span>
                             </div>
 
-                            {/* Tooltip */}
-                            {hoveredCriterion === criterion && explanations[criterion] && (
-                                <div className="tooltip-custom animate-in">
-                                    <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: 'hsl(var(--primary))' }}>
-                                        How important is {criterion}?
-                                    </div>
-                                    {explanations[criterion]}
-                                </div>
-                            )}
-                        </div>
+                            {/* Hover tooltip for larger explanation (desktop) */}
+                            <AnimatePresence>
+                                {hoveredCriterion === criterion && explanations[criterion] && (
+                                    <motion.div
+                                        initial={{ opacity: 0, x: 10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        exit={{ opacity: 0, x: 10 }}
+                                        className="hidden lg:block absolute left-full top-1/2 -translate-y-1/2 ml-4 w-72 p-4 bg-card border border-primary/20 rounded-xl shadow-warm-lg z-10"
+                                    >
+                                        <div className="text-sm">
+                                            <p className="font-semibold text-primary mb-1">
+                                                How important is {criterion}?
+                                            </p>
+                                            <p className="text-muted-foreground leading-relaxed">
+                                                {explanations[criterion]}
+                                            </p>
+                                        </div>
+                                        {/* Arrow */}
+                                        <div className="absolute right-full top-1/2 -translate-y-1/2 border-8 border-transparent border-r-primary/20" />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </motion.div>
                     ))}
                 </div>
+            </Card>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
-                    <button onClick={onBack} className="btn btn-secondary">← Back</button>
-                    <button onClick={() => onNext(weights)} className="btn btn-primary btn-lg">Continue to Rating →</button>
+            {/* Summary */}
+            <Card className="p-4 mb-6 bg-secondary/30">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Info className="h-4 w-4" />
+                    <span>
+                        Your top priorities: {' '}
+                        <span className="font-medium text-foreground">
+                            {Object.entries(weights)
+                                .sort(([, a], [, b]) => b - a)
+                                .slice(0, 3)
+                                .map(([c]) => c)
+                                .join(', ')}
+                        </span>
+                    </span>
                 </div>
-            </div>
+            </Card>
 
-            <style jsx>{`
-                .slider-container {
-                    position: relative;
-                    margin-bottom: 1.5rem;
-                    padding-bottom: 0.5rem;
-                }
-                .slider-label {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 0.5rem;
-                }
-                .slider-value-label {
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                    color: hsl(var(--primary));
-                }
-                .custom-slider-wrapper {
-                    position: relative;
-                    padding: 10px 0;
-                }
-                .custom-slider {
-                    width: 100%;
-                    height: 8px;
-                    -webkit-appearance: none;
-                    appearance: none;
-                    background: hsl(var(--muted));
-                    border-radius: 4px;
-                    outline: none;
-                }
-                .custom-slider::-webkit-slider-thumb {
-                    -webkit-appearance: none;
-                    appearance: none;
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 50%;
-                    background: hsl(var(--primary));
-                    cursor: pointer;
-                    border: 3px solid white;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-                }
-                .custom-slider::-moz-range-thumb {
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 50%;
-                    background: hsl(var(--primary));
-                    cursor: pointer;
-                    border: 3px solid white;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-                }
-                .slider-thumb-value {
-                    position: absolute;
-                    top: 50%;
-                    transform: translate(-50%, -50%);
-                    width: 36px;
-                    height: 36px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 0.85rem;
-                    font-weight: 700;
-                    color: white;
-                    pointer-events: none;
-                    z-index: 5;
-                }
-                .slider-scale {
-                    display: flex;
-                    justify-content: space-between;
-                    font-size: 0.75rem;
-                    color: hsl(var(--foreground) / 0.5);
-                    margin-top: 0.25rem;
-                }
-                .tooltip-custom {
-                    position: absolute;
-                    left: 100%;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    margin-left: 1rem;
-                    background: hsl(var(--card));
-                    border: 1px solid hsl(var(--primary) / 0.3);
-                    padding: 1rem;
-                    border-radius: 0.75rem;
-                    width: 280px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-                    z-index: 10;
-                    pointer-events: none;
-                    font-size: 0.9rem;
-                    line-height: 1.5;
-                }
-                .tooltip-custom::before {
-                    content: '';
-                    position: absolute;
-                    right: 100%;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    border-width: 8px;
-                    border-style: solid;
-                    border-color: transparent hsl(var(--primary) / 0.3) transparent transparent;
-                }
-                @media (max-width: 800px) {
-                    .tooltip-custom {
-                        left: 0;
-                        top: 100%;
-                        transform: none;
-                        margin-left: 0;
-                        margin-top: 0.5rem;
-                        width: 100%;
-                        position: relative;
-                        z-index: 1;
-                    }
-                    .tooltip-custom::before {
-                        display: none;
-                    }
-                }
-            `}</style>
-        </div>
+            {/* Navigation */}
+            <div className="flex justify-between gap-4">
+                <Button variant="outline" onClick={onBack} className="gap-2">
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                </Button>
+                <Button onClick={() => onNext(weights)} size="lg" className="gap-2">
+                    Continue to Rating
+                    <ArrowRight className="h-5 w-5" />
+                </Button>
+            </div>
+        </motion.div>
     );
 }

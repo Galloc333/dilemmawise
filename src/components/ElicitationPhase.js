@@ -1,12 +1,17 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, ArrowRight, MessageCircle, Check, Info, ExternalLink, BookOpen, Sparkles, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Slider } from '@/components/ui/slider';
+import { cn } from '@/lib/utils';
 
 export default function ElicitationPhase({ options, criteria, weights, onComplete, onBack, savedDescription, dilemma, userContext = {} }) {
-    const [stage, setStage] = useState('intro'); // intro, context, questions, complete
-    // Initialize context with any userContext passed from InputPhase
+    const [stage, setStage] = useState('intro');
     const [context, setContext] = useState(() => {
         const initial = {};
-        // Merge in any existing user context (budget, preferences, etc.)
         if (userContext && typeof userContext === 'object') {
             Object.entries(userContext).forEach(([key, value]) => {
                 if (value && value !== 'null') {
@@ -31,12 +36,11 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
-        // Initialize currentScores when question changes
         const currentQ = questions[currentQuestionIndex];
         if (currentQ && currentQ.relates_to && currentQ.relates_to.options) {
             const initial = {};
             currentQ.relates_to.options.forEach(opt => {
-                initial[opt] = 5; // Default middle value
+                initial[opt] = 5;
             });
             setCurrentScores(initial);
         }
@@ -54,13 +58,12 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                     criteria,
                     description: savedDescription,
                     dilemma,
-                    userContext: { ...userContext, ...context } // Pass existing context to avoid re-asking
+                    userContext: { ...userContext, ...context }
                 })
             });
 
             const data = await res.json();
 
-            // Auto-fill context that the AI extracted from description
             if (data.already_known_context) {
                 setContext(prev => ({ ...prev, ...data.already_known_context }));
             }
@@ -69,7 +72,6 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
             return data;
         } catch (error) {
             console.error('Failed to analyze context:', error);
-            // Return fallback analysis
             return { needs_more_context: true, questions: [], placeholder_hint: null };
         } finally {
             setLoading(false);
@@ -107,8 +109,6 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
 
     const handleIntroNext = async () => {
         const analysis = await analyzeContextNeeds();
-        // Always show the Quick Details step to collect user preferences
-        // Even if no specific questions, user can add notes
         setStage('context');
     };
 
@@ -120,7 +120,6 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
     const handleResponseSubmit = () => {
         const isLastQuestion = currentQuestionIndex === questions.length - 1;
         
-        // If it's the last question, set loading immediately to prevent UI flicker
         if (isLastQuestion) {
             setLoading(true);
         }
@@ -136,17 +135,14 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
         setResponses(newResponses);
 
         if (!isLastQuestion) {
-            // Only reset scores and move to next question if not the last one
             setCurrentScores({});
             setCurrentQuestionIndex(currentQuestionIndex + 1);
         } else {
-            // All questions answered, infer ratings (loading already set above)
             inferRatings(newResponses);
         }
     };
 
     const inferRatings = async (allResponses) => {
-        // Note: loading is already set to true in handleResponseSubmit for last question
         if (!loading) setLoading(true);
         try {
             const res = await fetch('/api/elicit-ratings', {
@@ -172,175 +168,118 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
     };
 
     const handleComplete = () => {
-        // Pass back weights, scores, AND the collected user context
         onComplete({ 
             weights, 
             scores: inferredRatings.ratings,
-            userContext: context  // Include Quick Details context
+            userContext: context
         });
     };
 
-    // Helper to render clickable sources in question text if any exist there
     const renderTextWithSources = (text, sources) => {
         if (!sources || sources.length === 0) return text;
-
-        // Replace [source] placeholders with actual links
         let renderedText = text;
         sources.forEach((source, idx) => {
             const placeholder = '[source]';
             if (renderedText.includes(placeholder)) {
                 renderedText = renderedText.replace(
                     placeholder,
-                    `<a href="${source.url}" target="_blank" rel="noopener noreferrer" style="color: hsl(var(--primary)); text-decoration: underline;">[${source.title || 'source'}]</a>`
+                    `<a href="${source.url}" target="_blank" rel="noopener noreferrer" class="text-primary underline">[${source.title || 'source'}]</a>`
                 );
             }
         });
-
         return <span dangerouslySetInnerHTML={{ __html: renderedText }} />;
     };
 
+    // ========== INTRO STAGE ==========
     if (stage === 'intro') {
         return (
-            <div className="animate-in">
-                <div className="phase-header">
-                    <h1>Let's Understand Your Preferences</h1>
-                    <p>I'll ask you a few targeted questions to understand how each option meets your needs.</p>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-2xl mx-auto"
+            >
+                <div className="text-center mb-8">
+                    <h1 className="text-3xl font-semibold text-foreground mb-2">
+                        Let's Understand Your Preferences
+                    </h1>
+                    <p className="text-muted-foreground">
+                        I'll ask you a few targeted questions to understand how each option meets your needs.
+                    </p>
                 </div>
 
-                <div style={{ maxWidth: '700px', margin: '2rem auto' }}>
-                    <div className="card">
-                        <h3 style={{ marginBottom: '1rem' }}>How it works</h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'start' }}>
-                                <div style={{
-                                    width: '32px',
-                                    height: '32px',
-                                    borderRadius: '50%',
-                                    background: 'linear-gradient(135deg, hsl(var(--primary)), #a855f7)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: 'white',
-                                    fontWeight: '700',
-                                    flexShrink: 0
-                                }}>1</div>
+                <Card className="p-6 mb-6">
+                    <h3 className="font-semibold text-foreground mb-4">How it works</h3>
+                    <div className="space-y-4">
+                        {[
+                            { num: 1, title: 'Natural conversation', desc: "I'll ask conversational questions, not boring forms" },
+                            { num: 2, title: `Just ${Math.floor(criteria.length + 2)} questions max`, desc: 'Short and focused' },
+                            { num: 3, title: 'Weighted-sum analysis', desc: 'Your inputs are passed into a weighted-sum algorithm to compute which option fits you best' },
+                        ].map((step) => (
+                            <div key={step.num} className="flex gap-4 items-start">
+                                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold shrink-0">
+                                    {step.num}
+                                </div>
                                 <div>
-                                    <strong>Natural conversation</strong>
-                                    <p style={{ margin: '0.25rem 0 0', opacity: 0.8, fontSize: '0.9rem' }}>
-                                        I'll ask conversational questions, not boring forms
-                                    </p>
+                                    <p className="font-medium text-foreground">{step.title}</p>
+                                    <p className="text-sm text-muted-foreground">{step.desc}</p>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'start' }}>
-                                <div style={{
-                                    width: '32px',
-                                    height: '32px',
-                                    borderRadius: '50%',
-                                    background: 'linear-gradient(135deg, hsl(var(--primary)), #a855f7)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: 'white',
-                                    fontWeight: '700',
-                                    flexShrink: 0
-                                }}>2</div>
-                                <div>
-                                    <strong>Just {Math.floor(criteria.length + 2)} questions max</strong>
-                                    <p style={{ margin: '0.25rem 0 0', opacity: 0.8, fontSize: '0.9rem' }}>
-                                        Short and focused
-                                    </p>
-                                </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: '1rem', alignItems: 'start' }}>
-                                <div style={{
-                                    width: '32px',
-                                    height: '32px',
-                                    borderRadius: '50%',
-                                    background: 'linear-gradient(135deg, hsl(var(--primary)), #a855f7)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: 'white',
-                                    fontWeight: '700',
-                                    flexShrink: 0
-                                }}>3</div>
-                                <div>
-                                    <strong>Weighted-sum analysis</strong>
-                                    <p style={{ margin: '0.25rem 0 0', opacity: 0.8, fontSize: '0.9rem' }}>
-                                        Your inputs are passed into a weighted-sum algorithm to compute which option fits you best
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
+                        ))}
                     </div>
+                </Card>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginTop: '2rem' }}>
-                        <button onClick={onBack} className="btn btn-secondary">
-                            ← Back to Criteria
-                        </button>
-                        <button
-                            onClick={handleIntroNext}
-                            className="btn btn-primary btn-lg"
-                            disabled={loading}
-                        >
-                            {loading ? 'Analyzing...' : "Let's Begin →"}
-                        </button>
-                    </div>
+                <div className="flex justify-between gap-4">
+                    <Button variant="outline" onClick={onBack}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Back to Criteria
+                    </Button>
+                    <Button onClick={handleIntroNext} disabled={loading} size="lg">
+                        {loading ? 'Analyzing...' : "Let's Begin"}
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
                 </div>
-            </div>
+            </motion.div>
         );
     }
 
+    // ========== CONTEXT STAGE ==========
     if (stage === 'context') {
-        const questions = contextAnalysis?.questions || [];
+        const contextQuestions = contextAnalysis?.questions || [];
         
-        // Generate contextual placeholder based on dilemma and options
-        // First try to use the AI-generated hint, then fall back to local generation
         const generateContextualPlaceholder = () => {
-            // Use API-provided hint if available
             if (contextAnalysis?.placeholder_hint) {
                 return contextAnalysis.placeholder_hint;
             }
-            
             const optionsList = options.slice(0, 2).join(' or ');
             const criteriaList = criteria.slice(0, 2).join(', ');
-            
-            // Different placeholders based on dilemma type
-            const dilemmaLower = (dilemma || '').toLowerCase();
-            
-            if (dilemmaLower.includes('phone') || dilemmaLower.includes('laptop') || dilemmaLower.includes('computer')) {
-                return `e.g., I mainly use my device for work/gaming, I prefer a specific brand, I need good customer support...`;
-            } else if (dilemmaLower.includes('job') || dilemmaLower.includes('career') || dilemmaLower.includes('work')) {
-                return `e.g., I have a family to consider, I value work-life balance, I'm open to relocation...`;
-            } else if (dilemmaLower.includes('city') || dilemmaLower.includes('move') || dilemmaLower.includes('live')) {
-                return `e.g., I have pets, I need good public transport, I prefer warm weather...`;
-            } else if (dilemmaLower.includes('car') || dilemmaLower.includes('vehicle')) {
-                return `e.g., I drive mostly in the city, I need space for kids, fuel efficiency is important...`;
-            } else if (dilemmaLower.includes('school') || dilemmaLower.includes('university') || dilemmaLower.includes('college')) {
-                return `e.g., I prefer smaller class sizes, I want to be close to family, campus life matters to me...`;
-            } else {
-                // Generic but still contextual
-                return `e.g., Any personal preferences about ${optionsList}? Constraints related to ${criteriaList}?`;
-            }
+            return `e.g., Any personal preferences about ${optionsList}? Constraints related to ${criteriaList}?`;
         };
 
         return (
-            <div className="animate-in">
-                <div className="phase-header">
-                    <h1>Just a Few Quick Details</h1>
-                    <p>To give you the best comparison possible, I'd like to understand a bit more about your situation.</p>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-xl mx-auto"
+            >
+                <div className="text-center mb-8">
+                    <h1 className="text-3xl font-semibold text-foreground mb-2">
+                        Just a Few Quick Details
+                    </h1>
+                    <p className="text-muted-foreground">
+                        To give you the best comparison, I'd like to understand a bit more about your situation.
+                    </p>
                 </div>
 
-                <div style={{ maxWidth: '600px', margin: '2rem auto' }}>
-                    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                        {questions.length > 0 ? (
-                            questions.map((q, idx) => (
+                <Card className="p-6 mb-6">
+                    <div className="space-y-5">
+                        {contextQuestions.length > 0 ? (
+                            contextQuestions.map((q, idx) => (
                                 <div key={idx}>
-                                    <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: '600', fontSize: '1rem' }}>
+                                    <label className="block font-medium text-foreground mb-1">
                                         {q.question}
                                     </label>
                                     {q.reason && (
-                                        <p style={{ fontSize: '0.85rem', opacity: 0.6, marginBottom: '0.5rem' }}>
+                                        <p className="text-sm text-muted-foreground mb-2">
                                             {q.reason}
                                         </p>
                                     )}
@@ -349,25 +288,18 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                         placeholder="Type your answer..."
                                         value={context[q.field] || ''}
                                         onChange={(e) => setContext({ ...context, [q.field]: e.target.value })}
-                                        style={{
-                                            width: '100%',
-                                            padding: '0.75rem',
-                                            border: '1px solid hsl(var(--border))',
-                                            borderRadius: '0.5rem',
-                                            fontSize: '1rem',
-                                            background: 'hsl(var(--background))'
-                                        }}
+                                        className="w-full px-4 py-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                                     />
                                 </div>
                             ))
                         ) : (
-                            <p style={{ textAlign: 'center', opacity: 0.7 }}>
+                            <p className="text-center text-muted-foreground">
                                 No specific questions needed based on your criteria. Feel free to add any additional context below!
                             </p>
                         )}
 
-                        <div style={{ borderTop: '1px solid hsl(var(--border))', paddingTop: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500', fontSize: '0.9rem', opacity: 0.8 }}>
+                        <div className="pt-4 border-t border-border">
+                            <label className="block text-sm font-medium text-muted-foreground mb-2">
                                 Anything else I should know? (Optional)
                             </label>
                             <textarea
@@ -375,197 +307,145 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                 value={context.notes || ''}
                                 onChange={(e) => setContext({ ...context, notes: e.target.value })}
                                 rows={2}
-                                style={{
-                                    width: '100%',
-                                    padding: '0.75rem',
-                                    border: '1px solid hsl(var(--border))',
-                                    borderRadius: '0.5rem',
-                                    fontSize: '0.95rem',
-                                    resize: 'vertical',
-                                    background: 'hsl(var(--background))'
-                                }}
+                                className="w-full px-4 py-2.5 rounded-lg border border-border bg-background text-foreground resize-y focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                             />
                         </div>
                     </div>
+                </Card>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginTop: '2rem' }}>
-                        <button onClick={() => setStage('intro')} className="btn btn-secondary">
-                            ← Back
-                        </button>
-                        <button onClick={handleContextSubmit} className="btn btn-primary btn-lg">
-                            Continue →
-                        </button>
-                    </div>
+                <div className="flex justify-between gap-4">
+                    <Button variant="outline" onClick={() => setStage('intro')}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Back
+                    </Button>
+                    <Button onClick={handleContextSubmit} size="lg">
+                        Continue
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
                 </div>
-            </div>
+            </motion.div>
         );
     }
 
+    // ========== GENERATING STAGE ==========
     if (stage === 'generating') {
         return (
-            <div className="animate-in" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
-                <div className="spinner" style={{ margin: '0 auto 1.5rem' }}></div>
-                <h2>Preparing your questions...</h2>
-                <p style={{ opacity: 0.7 }}>This will just take a moment</p>
-            </div>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-16"
+            >
+                <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-6" />
+                <h2 className="text-xl font-semibold text-foreground mb-2">Preparing your questions...</h2>
+                <p className="text-muted-foreground">This will just take a moment</p>
+            </motion.div>
         );
     }
 
+    // ========== QUESTIONS STAGE ==========
     if (stage === 'questions') {
         const currentQuestion = questions[currentQuestionIndex];
         const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
 
         return (
-            <div className="animate-in">
-                <div className="phase-header">
-                    <h1>Conversation</h1>
-                    <p>Question {currentQuestionIndex + 1} of {questions.length}</p>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-3xl mx-auto"
+            >
+                <div className="text-center mb-6">
+                    <h1 className="text-2xl font-semibold text-foreground mb-1">Rate Your Options</h1>
+                    <p className="text-muted-foreground">Question {currentQuestionIndex + 1} of {questions.length}</p>
                 </div>
 
                 {/* Progress bar */}
-                <div style={{ maxWidth: '800px', margin: '0 auto 2rem' }}>
-                    <div style={{
-                        width: '100%',
-                        height: '6px',
-                        background: 'hsl(var(--border))',
-                        borderRadius: '3px',
-                        overflow: 'hidden'
-                    }}>
-                        <div style={{
-                            width: `${progress}%`,
-                            height: '100%',
-                            background: 'linear-gradient(90deg, hsl(var(--primary)), #a855f7)',
-                            transition: 'width 0.3s ease'
-                        }} />
-                    </div>
-                </div>
+                <Progress value={progress} className="mb-6 h-2" />
 
-                {/* Chat interface */}
-                <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-                    <div className="card" style={{ minHeight: '300px', display: 'flex', flexDirection: 'column' }}>
-                        {/* Previous Q&A */}
-                        <div style={{ flex: 1, marginBottom: '1.5rem', maxHeight: '400px', overflowY: 'auto' }}>
-                            {responses.map((resp, idx) => (
-                                <div key={idx} style={{ marginBottom: '1.5rem', opacity: 0.6 }}>
-                                    <div style={{
-                                        background: 'hsl(var(--primary) / 0.1)',
-                                        padding: '0.75rem 1rem',
-                                        borderRadius: '1rem 1rem 1rem 0.25rem',
-                                        marginBottom: '0.5rem'
-                                    }}>
-                                        <strong>Q{idx + 1}:</strong> <span dangerouslySetInnerHTML={{ __html: resp.question }} />
-                                    </div>
-                                    <div style={{
-                                        background: 'hsl(var(--muted))',
-                                        padding: '0.75rem 1rem',
-                                        borderRadius: '1rem 1rem 0.25rem 1rem',
-                                        marginLeft: '2rem'
-                                    }}>
-                                        {/* Display human-readable scores instead of raw JSON */}
-                                        {resp.numeric_scores ? (
-                                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                                                {Object.entries(resp.numeric_scores).map(([opt, score]) => (
-                                                    <span key={opt} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                        <strong>{opt}:</strong>
-                                                        <span style={{
-                                                            background: 'hsl(var(--primary))',
-                                                            color: 'white',
-                                                            padding: '0.1rem 0.5rem',
-                                                            borderRadius: '0.75rem',
-                                                            fontSize: '0.85rem',
-                                                            fontWeight: 'bold'
-                                                        }}>{score}/10</span>
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        ) : resp.answer}
-                                    </div>
+                <Card className="p-6">
+                    {/* Previous responses */}
+                    <div className="max-h-64 overflow-y-auto mb-4 space-y-4">
+                        {responses.map((resp, idx) => (
+                            <div key={idx} className="opacity-60">
+                                <div className="bg-primary/10 px-4 py-3 rounded-xl rounded-bl-sm mb-2">
+                                    <span className="font-medium">Q{idx + 1}:</span>{' '}
+                                    <span dangerouslySetInnerHTML={{ __html: resp.question }} />
                                 </div>
-                            ))}
+                                <div className="bg-secondary/50 px-4 py-3 rounded-xl rounded-br-sm ml-8">
+                                    {resp.numeric_scores && (
+                                        <div className="flex gap-3 flex-wrap">
+                                            {Object.entries(resp.numeric_scores).map(([opt, score]) => (
+                                                <span key={opt} className="flex items-center gap-1.5">
+                                                    <span className="font-medium">{opt}:</span>
+                                                    <span className="bg-primary text-primary-foreground px-2 py-0.5 rounded-full text-xs font-bold">
+                                                        {score}/10
+                                                    </span>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
 
-                            {/* Current Question - hide when loading/analyzing */}
-                            {currentQuestion && !loading && (
-                                <>
-                                    <div style={{
-                                        background: 'hsl(var(--primary) / 0.1)',
-                                        padding: '1rem 1.25rem',
-                                        borderRadius: '1rem 1rem 1rem 0.25rem',
-                                        marginBottom: '0.5rem',
-                                        border: '2px solid hsl(var(--primary) / 0.3)',
-                                        position: 'relative'
-                                    }}>
-                                        <div style={{ display: 'flex', alignItems: 'start', gap: '0.75rem' }}>
-                                            <div style={{ flex: 1 }}>
-                                                <strong>Q{currentQuestionIndex + 1}:</strong> {currentQuestion.text}
+                        {/* Current Question */}
+                        {currentQuestion && !loading && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                            >
+                                <div className="bg-primary/10 border-2 border-primary/30 px-4 py-4 rounded-xl rounded-bl-sm">
+                                    <div className="flex items-start gap-3">
+                                        <div className="flex-1">
+                                            <span className="font-semibold">Q{currentQuestionIndex + 1}:</span>{' '}
+                                            {currentQuestion.text}
 
-                                                {/* Glossary / Terms Explanation */}
-                                                {currentQuestion.glossary && Object.keys(currentQuestion.glossary).length > 0 && (
-                                                    <div style={{
-                                                        marginTop: '0.75rem',
-                                                        fontSize: '0.85rem',
-                                                        color: 'hsl(var(--foreground) / 0.6)',
-                                                        background: 'hsl(var(--foreground) / 0.04)',
-                                                        padding: '0.5rem 0.75rem',
-                                                        borderRadius: '0.5rem',
-                                                        borderLeft: '2px solid hsl(var(--primary) / 0.4)'
-                                                    }}>
-                                                        {Object.entries(currentQuestion.glossary).map(([term, def], i) => (
-                                                            <div key={term}>
-                                                                <strong>{term}:</strong> {def}
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            {currentQuestion.webFacts && (
-                                                <button
-                                                    onClick={() => setShowWebFacts(!showWebFacts)}
-                                                    style={{
-                                                        background: 'none',
-                                                        border: 'none',
-                                                        cursor: 'pointer',
-                                                        fontSize: '1.3rem',
-                                                        flexShrink: 0,
-                                                        marginTop: '0.1rem',
-                                                        padding: 0,
-                                                        opacity: showWebFacts ? 1 : 0.7,
-                                                        transition: 'opacity 0.2s'
-                                                    }}
-                                                    title={showWebFacts ? "Click to hide additional research and charts" : "Click to view real-world data, price comparisons, and helpful charts for this question"}
-                                                >
-                                                    <span style={{ filter: 'grayscale(0%)' }}>ℹ️</span>
-                                                </button>
+                                            {/* Glossary */}
+                                            {currentQuestion.glossary && Object.keys(currentQuestion.glossary).length > 0 && (
+                                                <div className="mt-3 text-sm text-muted-foreground bg-secondary/30 p-3 rounded-lg border-l-2 border-primary/40">
+                                                    {Object.entries(currentQuestion.glossary).map(([term, def]) => (
+                                                        <div key={term}>
+                                                            <strong>{term}:</strong> {def}
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             )}
                                         </div>
 
-                                        {/* Inline Web Facts Display */}
+                                        {/* Web Facts Toggle */}
+                                        {currentQuestion.webFacts && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setShowWebFacts(!showWebFacts)}
+                                                className={cn(
+                                                    "shrink-0 transition-colors",
+                                                    showWebFacts ? "text-primary" : "text-muted-foreground"
+                                                )}
+                                                title={showWebFacts ? "Hide research" : "Show research"}
+                                            >
+                                                <Info className="h-5 w-5" />
+                                            </Button>
+                                        )}
+                                    </div>
+
+                                    {/* Web Facts Expanded */}
+                                    <AnimatePresence>
                                         {showWebFacts && currentQuestion.webFacts && (
-                                            <div className="animate-in fade-in slide-in-from-top-2" style={{
-                                                marginTop: '1rem',
-                                                padding: '1rem',
-                                                background: 'hsl(var(--background))',
-                                                border: '1px solid hsl(var(--border))',
-                                                borderRadius: '0.5rem',
-                                                fontSize: '0.9rem',
-                                                lineHeight: '1.5'
-                                            }}>
-                                                <div style={{
-                                                    fontWeight: '600',
-                                                    marginBottom: '0.5rem',
-                                                    color: 'hsl(var(--primary))',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.5rem'
-                                                }}>
-                                                    📚 Web Evidence
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="mt-4 p-4 bg-background border border-border rounded-lg text-sm"
+                                            >
+                                                <div className="font-semibold text-primary mb-3 flex items-center gap-2">
+                                                    <BookOpen className="h-4 w-4" />
+                                                    Web Evidence
                                                 </div>
 
-                                                {/* Chart Visualizations - supports multiple charts */}
+                                                {/* Charts */}
                                                 {currentQuestion.webFacts.charts && currentQuestion.webFacts.charts.length > 0 && (() => {
-                                                    // Helper to validate chart data - filters out invalid entries
                                                     const isValidChartItem = (item) => {
                                                         if (!item || !item.label) return false;
-                                                        // Check if value is a valid number
                                                         const val = item.value;
                                                         if (val === null || val === undefined) return false;
                                                         if (typeof val === 'string' && isNaN(parseFloat(val))) return false;
@@ -573,7 +453,6 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                                         return true;
                                                     };
                                                     
-                                                    // Filter charts that have at least one valid data point
                                                     const validCharts = currentQuestion.webFacts.charts
                                                         .map(chart => ({
                                                             ...chart,
@@ -584,335 +463,237 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                                                     if (validCharts.length === 0) return null;
                                                     
                                                     return (
-                                                    <div style={{ marginBottom: '1.5rem' }}>
-                                                        {validCharts.slice(0, 3).map((chart, chartIdx) => (
-                                                            <div key={chartIdx} style={{ marginBottom: chartIdx < validCharts.length - 1 ? '1.25rem' : 0 }}>
-                                                                {chart.chart_title && (
-                                                                    <div style={{ fontSize: '0.86rem', fontWeight: '600', marginBottom: '0.75rem', opacity: 0.8 }}>
-                                                                        📊 {chart.chart_title}
-                                                                    </div>
-                                                                )}
+                                                        <div className="mb-4 space-y-4">
+                                                            {validCharts.slice(0, 3).map((chart, chartIdx) => (
+                                                                <div key={chartIdx}>
+                                                                    {chart.chart_title && (
+                                                                        <div className="text-sm font-semibold mb-2 flex items-center gap-1.5">
+                                                                            <BarChart3 className="h-4 w-4" />
+                                                                            {chart.chart_title}
+                                                                        </div>
+                                                                    )}
 
-                                                                {/* Bar Chart */}
-                                                                {(chart.chart_type === 'bar' || !chart.chart_type) && chart.chart_data.length > 0 && (() => {
-                                                                    const numericData = chart.chart_data.map(d => ({ ...d, value: parseFloat(d.value) }));
-                                                                    const maxValue = Math.max(...numericData.map(d => d.value));
-                                                                    if (maxValue <= 0) return null;
-                                                                    
-                                                                    return (
-                                                                    <div style={{ background: 'hsl(var(--foreground) / 0.03)', padding: '1rem', borderRadius: '0.6rem', border: '1px solid hsl(var(--border) / 0.5)' }}>
-                                                                        {numericData.map((item, idx) => (
-                                                                            <div key={idx} style={{ marginBottom: idx === numericData.length - 1 ? 0 : '1rem' }}>
-                                                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
-                                                                                    <span style={{ fontWeight: '500' }}>{item.label}</span>
-                                                                                    <span style={{ fontWeight: '600', color: 'hsl(var(--primary))' }}>
-                                                                                        {Number.isInteger(item.value) ? item.value : item.value.toLocaleString()}{item.unit || ''}
-                                                                                    </span>
-                                                                                </div>
-                                                                                <div style={{ width: '100%', height: '8px', background: 'hsl(var(--foreground) / 0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-                                                                                    <div style={{
-                                                                                        width: `${(item.value / maxValue) * 100}%`,
-                                                                                        height: '100%',
-                                                                                        background: 'hsl(var(--primary))',
-                                                                                        borderRadius: '4px',
-                                                                                        transition: 'width 1.2s ease-out'
-                                                                                    }} />
-                                                                                </div>
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                    );
-                                                                })()}
-
-                                                                {/* Scale Chart */}
-                                                                {chart.chart_type === 'scale' && chart.chart_data.length > 0 && (() => {
-                                                                    const numericData = chart.chart_data.map(d => ({ ...d, value: parseFloat(d.value) }));
-                                                                    const maxValue = Math.max(...numericData.map(d => d.value));
-                                                                    const minValue = Math.min(...numericData.map(d => d.value));
-                                                                    const range = maxValue - minValue || 1;
-                                                                    if (range === 0 && numericData.length > 1) return null;
-                                                                    
-                                                                    return (
-                                                                    <div style={{ background: 'hsl(var(--foreground) / 0.03)', padding: '1rem', borderRadius: '0.6rem', border: '1px solid hsl(var(--border) / 0.5)' }}>
-                                                                        <div style={{ position: 'relative', height: '40px', marginBottom: '0.5rem' }}>
-                                                                            <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: '4px', background: 'linear-gradient(90deg, hsl(0 70% 60%), hsl(60 70% 60%), hsl(120 70% 60%))', borderRadius: '2px', transform: 'translateY(-50%)' }} />
-                                                                            {numericData.map((item, idx) => {
-                                                                                const position = range > 0 ? ((item.value - minValue) / range) * 100 : 50;
-                                                                                return (
-                                                                                    <div key={idx} style={{ position: 'absolute', left: `${position}%`, top: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                                                                                        <div style={{ background: 'hsl(var(--primary))', color: 'white', padding: '0.2rem 0.5rem', borderRadius: '0.4rem', fontSize: '0.75rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                                                                                            {item.label}
+                                                                    {/* Bar Chart */}
+                                                                    {(chart.chart_type === 'bar' || !chart.chart_type) && chart.chart_data.length > 0 && (() => {
+                                                                        const numericData = chart.chart_data.map(d => ({ ...d, value: parseFloat(d.value) }));
+                                                                        const maxValue = Math.max(...numericData.map(d => d.value));
+                                                                        if (maxValue <= 0) return null;
+                                                                        
+                                                                        return (
+                                                                            <div className="bg-secondary/30 p-3 rounded-lg space-y-3">
+                                                                                {numericData.map((item, idx) => (
+                                                                                    <div key={idx}>
+                                                                                        <div className="flex justify-between text-xs mb-1">
+                                                                                            <span className="font-medium">{item.label}</span>
+                                                                                            <span className="font-semibold text-primary">
+                                                                                                {Number.isInteger(item.value) ? item.value : item.value.toLocaleString()}{item.unit || ''}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
+                                                                                            <motion.div
+                                                                                                initial={{ width: 0 }}
+                                                                                                animate={{ width: `${(item.value / maxValue) * 100}%` }}
+                                                                                                transition={{ duration: 0.8, ease: 'easeOut' }}
+                                                                                                className="h-full bg-primary rounded-full"
+                                                                                            />
                                                                                         </div>
                                                                                     </div>
-                                                                                );
-                                                                            })}
-                                                                        </div>
-                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', opacity: 0.6 }}>
-                                                                            <span>Low</span>
-                                                                            <span>High</span>
-                                                                        </div>
-                                                                    </div>
-                                                                    );
-                                                                })()}
-
-                                                                {/* Comparison Table */}
-                                                                {chart.chart_type === 'comparison_table' && chart.chart_data.length > 0 && (
-                                                                    <div style={{ background: 'hsl(var(--foreground) / 0.03)', padding: '1rem', borderRadius: '0.6rem', border: '1px solid hsl(var(--border) / 0.5)', overflowX: 'auto' }}>
-                                                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                                                                            <tbody>
-                                                                                {chart.chart_data.map((item, idx) => (
-                                                                                    <tr key={idx} style={{ borderBottom: idx < chart.chart_data.length - 1 ? '1px solid hsl(var(--border) / 0.3)' : 'none' }}>
-                                                                                        <td style={{ padding: '0.5rem', fontWeight: '600' }}>{item.label}</td>
-                                                                                        <td style={{ padding: '0.5rem', textAlign: 'right', color: 'hsl(var(--primary))', fontWeight: '500' }}>
-                                                                                            {typeof item.value === 'number' ? item.value.toLocaleString() : item.value}{item.unit || ''}
-                                                                                        </td>
-                                                                                    </tr>
                                                                                 ))}
-                                                                            </tbody>
-                                                                        </table>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        ))}
+                                                                            </div>
+                                                                        );
+                                                                    })()}
+                                                                </div>
+                                                            ))}
 
-                                                        {currentQuestion.webFacts.takeaway && (
-                                                            <div style={{
-                                                                marginTop: '0.75rem',
-                                                                padding: '0.75rem 1rem',
-                                                                background: 'hsl(var(--primary) / 0.05)',
-                                                                borderLeft: '3px solid hsl(var(--primary))',
-                                                                fontSize: '0.86rem',
-                                                                fontStyle: 'italic',
-                                                                lineHeight: '1.4'
-                                                            }}>
-                                                                💡 {currentQuestion.webFacts.takeaway}
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                            {currentQuestion.webFacts.takeaway && (
+                                                                <div className="p-3 bg-primary/5 border-l-2 border-primary text-sm italic">
+                                                                    💡 {currentQuestion.webFacts.takeaway}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     );
                                                 })()}
 
-                                                <div style={{ marginBottom: '1.25rem' }}>
-                                                    <div style={{ fontSize: '0.86rem', fontWeight: '600', marginBottom: '0.6rem', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                                        <span>📝</span> Research Highlights
+                                                {/* Summary */}
+                                                <div className="mb-4">
+                                                    <div className="font-semibold mb-2 flex items-center gap-1.5">
+                                                        <Sparkles className="h-4 w-4" />
+                                                        Research Highlights
                                                     </div>
                                                     {currentQuestion.webFacts.summary.includes('\n') || currentQuestion.webFacts.summary.includes('- ') ? (
-                                                        <ul style={{ margin: 0, paddingLeft: '1.25rem', listStyleType: 'disc' }}>
+                                                        <ul className="list-disc pl-5 space-y-1">
                                                             {currentQuestion.webFacts.summary
                                                                 .split('\n')
                                                                 .filter(line => line.trim())
                                                                 .map((line, i) => (
-                                                                    <li key={i} style={{ marginBottom: '0.5rem' }}>
-                                                                        {line.replace(/^-\s*/, '').trim()}
-                                                                    </li>
+                                                                    <li key={i}>{line.replace(/^-\s*/, '').trim()}</li>
                                                                 ))
                                                             }
                                                         </ul>
                                                     ) : (
-                                                        currentQuestion.webFacts.summary
+                                                        <p>{currentQuestion.webFacts.summary}</p>
                                                     )}
                                                 </div>
 
-                                                {/* Takeaway only if no charts (prevent double) */}
-                                                {(!currentQuestion.webFacts.charts || currentQuestion.webFacts.charts.length === 0) && currentQuestion.webFacts.takeaway && (
-                                                    <div style={{
-                                                        marginBottom: '1.25rem',
-                                                        padding: '0.75rem 1rem',
-                                                        background: 'hsl(var(--primary) / 0.05)',
-                                                        borderLeft: '3px solid hsl(var(--primary))',
-                                                        fontSize: '0.86rem',
-                                                        fontStyle: 'italic'
-                                                    }}>
-                                                        💡 {currentQuestion.webFacts.takeaway}
-                                                    </div>
-                                                )}
-                                                <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>
+                                                {/* Sources */}
+                                                <div className="text-sm">
                                                     <strong>Sources:</strong>
-                                                    <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem' }}>
+                                                    <ul className="mt-1 pl-5 list-disc space-y-0.5">
                                                         {currentQuestion.webFacts.sources.map((source, idx) => (
-                                                            <li key={idx} style={{ marginBottom: '0.25rem' }}>
+                                                            <li key={idx}>
                                                                 <a
                                                                     href={source.url}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
-                                                                    style={{ color: 'hsl(var(--primary))', textDecoration: 'underline' }}
+                                                                    className="text-primary hover:underline inline-flex items-center gap-1"
                                                                 >
                                                                     {source.title || source.url}
+                                                                    <ExternalLink className="h-3 w-3" />
                                                                 </a>
                                                             </li>
                                                         ))}
                                                     </ul>
                                                 </div>
-                                                <div style={{
-                                                    marginTop: '0.75rem',
-                                                    padding: '0.5rem',
-                                                    background: 'hsl(var(--muted))',
-                                                    borderRadius: '0.5rem',
-                                                    fontSize: '0.75rem',
-                                                    fontStyle: 'italic',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.5rem'
-                                                }}>
-                                                    <span>💡</span>
-                                                    This info is for your reference only. Your answer determines the rating.
+
+                                                <div className="mt-3 p-2 bg-secondary/50 rounded text-xs italic flex items-center gap-2">
+                                                    <Info className="h-3.5 w-3.5 shrink-0" />
+                                                    This info is for reference only. Your answer determines the rating.
                                                 </div>
-                                            </div>
+                                            </motion.div>
                                         )}
-                                    </div>
-                                </>
-                            )}
-                            <div ref={chatEndRef} />
-                        </div>
-
-                        {/* Input area: 1-10 Sliders OR Loading state */}
-                        {loading ? (
-                            <div style={{ 
-                                padding: '2rem', 
-                                textAlign: 'center',
-                                background: 'hsl(var(--foreground) / 0.02)', 
-                                borderRadius: '0.75rem', 
-                                border: '1px solid hsl(var(--border))' 
-                            }}>
-                                <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
-                                <h3 style={{ marginBottom: '0.5rem' }}>Analyzing your preferences...</h3>
-                                <p style={{ opacity: 0.7, fontSize: '0.9rem' }}>
-                                    Processing your {responses.length + 1} responses to determine the best fit.
-                                </p>
-                            </div>
-                        ) : (
-                            <div style={{ padding: '1rem', background: 'hsl(var(--foreground) / 0.02)', borderRadius: '0.75rem', border: '1px solid hsl(var(--border))' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
-                                    {currentQuestion?.relates_to?.options?.map(option => (
-                                        <div key={option} style={{ background: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                                                <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>{option}</span>
-                                                <span style={{
-                                                    background: 'hsl(var(--primary))',
-                                                    color: 'white',
-                                                    padding: '0.2rem 0.6rem',
-                                                    borderRadius: '1rem',
-                                                    fontSize: '0.85rem',
-                                                    fontWeight: 'bold'
-                                                }}>
-                                                    {currentScores[option] || 5}
-                                                </span>
-                                            </div>
-                                            <input
-                                                type="range"
-                                                min="1"
-                                                max="10"
-                                                step="1"
-                                                value={currentScores[option] || 5}
-                                                onChange={(e) => setCurrentScores(prev => ({ ...prev, [option]: parseInt(e.target.value) }))}
-                                                style={{
-                                                    width: '100%',
-                                                    cursor: 'pointer',
-                                                    accentColor: 'hsl(var(--primary))'
-                                                }}
-                                            />
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', fontSize: '0.7rem', opacity: 0.5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                                <span>Poor</span>
-                                                <span>Excellent</span>
-                                            </div>
-                                        </div>
-                                    ))}
+                                    </AnimatePresence>
                                 </div>
-
-                                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                    <button
-                                        onClick={handleResponseSubmit}
-                                        className="btn btn-primary"
-                                        style={{ padding: '0.75rem 2rem', fontSize: '1rem' }}
-                                    >
-                                        {currentQuestionIndex === questions.length - 1 
-                                            ? '✨ Finish & Analyze'
-                                            : 'Next Question →'
-                                        }
-                                    </button>
-                                </div>
-                            </div>
+                            </motion.div>
                         )}
+                        <div ref={chatEndRef} />
                     </div>
-                </div>
-            </div>
+
+                    {/* Rating Input or Loading */}
+                    {loading ? (
+                        <div className="text-center py-8 bg-secondary/30 rounded-xl">
+                            <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4" />
+                            <h3 className="font-semibold text-foreground mb-1">Analyzing your preferences...</h3>
+                            <p className="text-sm text-muted-foreground">
+                                Processing your {responses.length + 1} responses.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="bg-secondary/30 p-4 rounded-xl border border-border">
+                            <div className="space-y-4 mb-4">
+                                {currentQuestion?.relates_to?.options?.map(option => (
+                                    <div key={option} className="bg-card p-4 rounded-lg shadow-sm">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <span className="font-semibold text-foreground">{option}</span>
+                                            <span className="bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-bold">
+                                                {currentScores[option] || 5}
+                                            </span>
+                                        </div>
+                                        <Slider
+                                            value={[currentScores[option] || 5]}
+                                            onValueChange={(val) => setCurrentScores(prev => ({ ...prev, [option]: val[0] }))}
+                                            min={1}
+                                            max={10}
+                                            step={1}
+                                            className="w-full"
+                                        />
+                                        <div className="flex justify-between mt-2 text-xs text-muted-foreground uppercase tracking-wide">
+                                            <span>Poor</span>
+                                            <span>Excellent</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex justify-end">
+                                <Button onClick={handleResponseSubmit} size="lg">
+                                    {currentQuestionIndex === questions.length - 1 
+                                        ? (
+                                            <>
+                                                <Sparkles className="mr-2 h-4 w-4" />
+                                                Finish & Analyze
+                                            </>
+                                        ) : (
+                                            <>
+                                                Next Question
+                                                <ArrowRight className="ml-2 h-4 w-4" />
+                                            </>
+                                        )
+                                    }
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </Card>
+            </motion.div>
         );
     }
 
+    // ========== COMPLETE STAGE ==========
     if (stage === 'complete') {
         return (
-            <div className="animate-in">
-                <div className="phase-header">
-                    <h1>✨ Analysis Complete</h1>
-                    <p>Based on your responses, here's what I understood about your preferences</p>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-4xl mx-auto"
+            >
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                        <Check className="h-8 w-8 text-primary" />
+                    </div>
+                    <h1 className="text-3xl font-semibold text-foreground mb-2">
+                        Analysis Complete
+                    </h1>
+                    <p className="text-muted-foreground">
+                        Based on your responses, here's what I understood about your preferences
+                    </p>
                 </div>
 
-                <div style={{ maxWidth: '900px', margin: '2rem auto' }}>
-                    {/* Rating Matrix Preview */}
-                    <div className="card">
-                        <h3 style={{ marginBottom: '1rem' }}>Rating Matrix</h3>
-                        <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                <thead>
-                                    <tr>
-                                        <th style={{ textAlign: 'left', padding: '0.75rem', borderBottom: '2px solid hsl(var(--border))' }}>
-                                            Option
-                                        </th>
-                                        {criteria.map(crit => (
-                                            <th key={crit} style={{ textAlign: 'center', padding: '0.75rem', borderBottom: '2px solid hsl(var(--border))' }}>
-                                                {crit}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {options.map(opt => (
-                                        <tr key={opt}>
-                                            <td style={{ padding: '0.75rem', fontWeight: '600', borderBottom: '1px solid hsl(var(--border))' }}>
-                                                {opt}
+                {/* Rating Matrix */}
+                <Card className="p-6 mb-6 overflow-x-auto">
+                    <h3 className="font-semibold text-foreground mb-4">Rating Matrix</h3>
+                    <table className="w-full border-collapse min-w-[500px]">
+                        <thead>
+                            <tr>
+                                <th className="text-left p-3 border-b-2 border-border font-semibold">Option</th>
+                                {criteria.map(crit => (
+                                    <th key={crit} className="text-center p-3 border-b-2 border-border font-semibold">
+                                        {crit}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {options.map(opt => (
+                                <tr key={opt} className="hover:bg-secondary/30 transition-colors">
+                                    <td className="p-3 font-semibold border-b border-border">{opt}</td>
+                                    {criteria.map(crit => {
+                                        const rating = inferredRatings?.ratings?.[opt]?.[crit] || 5;
+                                        return (
+                                            <td key={crit} className="text-center p-3 border-b border-border">
+                                                <span className={cn(
+                                                    "inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold",
+                                                    rating >= 8 ? "bg-primary/20 text-primary" :
+                                                    rating >= 5 ? "bg-secondary text-foreground" :
+                                                    "bg-destructive/10 text-destructive"
+                                                )}>
+                                                    {rating}
+                                                </span>
                                             </td>
-                                            {criteria.map(crit => {
-                                                const rating = inferredRatings?.ratings?.[opt]?.[crit] || 5;
-                                                return (
-                                                    <td key={crit} style={{
-                                                        textAlign: 'center',
-                                                        padding: '0.75rem',
-                                                        borderBottom: '1px solid hsl(var(--border))'
-                                                    }}>
-                                                        <div style={{
-                                                            display: 'inline-block',
-                                                            width: '32px',
-                                                            height: '32px',
-                                                            lineHeight: '32px',
-                                                            borderRadius: '50%',
-                                                            background: `hsl(var(--primary) / ${rating * 0.08})`,
-                                                            color: rating > 6 ? 'hsl(var(--primary))' : 'inherit',
-                                                            fontWeight: 'bold',
-                                                            fontSize: '0.9rem',
-                                                            border: `1px solid hsl(var(--primary) / ${rating * 0.1})`
-                                                        }}>
-                                                            {rating}
-                                                        </div>
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                                        );
+                                    })}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </Card>
 
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
-                        <button
-                            onClick={handleComplete}
-                            className="btn btn-primary btn-lg"
-                        >
-                            🎯 Analyze Decision
-                        </button>
-                    </div>
+                <div className="flex justify-end">
+                    <Button onClick={handleComplete} size="lg">
+                        <Sparkles className="mr-2 h-5 w-5" />
+                        Analyze Decision
+                    </Button>
                 </div>
-            </div>
+            </motion.div>
         );
     }
 

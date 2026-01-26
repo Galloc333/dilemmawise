@@ -1,5 +1,10 @@
 "use client";
 import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowRight, X, Plus, Send, Sparkles, Target, CheckCircle2, MessageCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 // SCREENS
 const SCREENS = {
@@ -31,7 +36,7 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             return data.refined || textOrItems;
         } catch (e) {
             console.error('Text refinement failed:', e);
-            return textOrItems; // Return original on error
+            return textOrItems;
         }
     };
 
@@ -46,12 +51,12 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
     const [coreDilemma, setCoreDilemma] = useState('');
     const [options, setOptions] = useState(initialOptions);
     const [criteria, setCriteria] = useState(initialCriteria);
-    const [userContext, setUserContext] = useState({}); // Store extracted personal details
+    const [userContext, setUserContext] = useState({});
 
     // Dilemma Input State
     const [dilemmaInput, setDilemmaInput] = useState('');
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [inputGuidance, setInputGuidance] = useState(''); // Real-time guidance hint
+    const [inputGuidance, setInputGuidance] = useState('');
     const guidanceTimeoutRef = useRef(null);
 
     // Chat State
@@ -65,34 +70,31 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
 
     // Confirmation Modal State
     const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [confirmAction, setConfirmAction] = useState(null); // 'criteria' or 'finish'
+    const [confirmAction, setConfirmAction] = useState(null);
 
-    // Real-time input guidance - detects over-detailed input while typing
+    // Real-time input guidance
     const analyzeInputWhileTyping = (text) => {
-        // Clear any pending timeout
         if (guidanceTimeoutRef.current) {
             clearTimeout(guidanceTimeoutRef.current);
         }
 
-        // Debounce: wait 800ms after user stops typing
         guidanceTimeoutRef.current = setTimeout(() => {
             const wordCount = text.trim().split(/\s+/).length;
             const hasOptions = /\b(or|vs\.?|versus|between)\b/i.test(text) && wordCount > 15;
             const hasCriteria = /\b(care about|important|matters?|consider|priority|budget|price|cost)\b/i.test(text);
-            const hasNumbers = /\d{3,}/.test(text); // Budget amounts, prices, etc.
+            const hasNumbers = /\d{3,}/.test(text);
             const hasMultipleSentences = (text.match(/[.!?]/g) || []).length > 1;
 
             if (wordCount > 25 || (hasOptions && hasCriteria) || (hasNumbers && hasCriteria) || hasMultipleSentences) {
-                setInputGuidance("💡 You're sharing more than we need right now. Just the core question is enough – we'll ask about the details later.");
+                setInputGuidance("You're sharing more than we need right now. Just the core question is enough – we'll ask about the details later.");
             } else if (wordCount > 15 && hasOptions) {
-                setInputGuidance("💡 Keep it simple! What's the main question you're trying to answer?");
+                setInputGuidance("Keep it simple! What's the main question you're trying to answer?");
             } else {
                 setInputGuidance('');
             }
         }, 800);
     };
 
-    // Handle dilemma input change with real-time guidance
     const handleDilemmaInputChange = (e) => {
         const value = e.target.value;
         setDilemmaInput(value);
@@ -116,7 +118,7 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
         if (!dilemmaInput.trim()) return;
 
         setIsAnalyzing(true);
-        setInputGuidance(''); // Clear any guidance
+        setInputGuidance('');
 
         let dilemmaQuestion = dilemmaInput.trim();
         dilemmaQuestion = dilemmaQuestion.charAt(0).toUpperCase() + dilemmaQuestion.slice(1);
@@ -132,34 +134,28 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             });
             const data = await response.json();
 
-            // Use summarized dilemma if available, otherwise use the original (refined)
             let finalDilemma = data.summarizedDilemma || dilemmaQuestion;
             finalDilemma = await refineText('dilemma', finalDilemma);
             setCoreDilemma(finalDilemma);
 
-            // Store user context for later use
             if (data.userContext && Object.keys(data.userContext).length > 0) {
                 setUserContext(data.userContext);
             }
 
-            // Refine and set extracted options
             let extractedOptions = (data.options || []).map(capitalizeFirst);
             if (extractedOptions.length > 0) {
                 extractedOptions = await refineText('options_list', extractedOptions);
                 setOptions(extractedOptions);
             }
 
-            // Refine and set extracted criteria (for display on criteria screen)
             let extractedCriteria = (data.criteria || []).map(capitalizeFirst);
             if (extractedCriteria.length > 0) {
                 extractedCriteria = await refineText('criteria_list', extractedCriteria);
                 setCriteria(extractedCriteria);
             }
 
-            // Move to OPTIONS screen
             setScreen(SCREENS.OPTIONS);
 
-            // Always call LLM for context-aware options suggestions (similar to criteria phase)
             setIsTyping(true);
             try {
                 const chatRes = await fetch('/api/chat', {
@@ -177,14 +173,12 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
                 const chatData = await chatRes.json();
                 setMessages([{ role: 'assistant', text: chatData.response }]);
 
-                // Auto-add any extracted options from the response
                 const newOpts = (chatData.suggestedOptions || []).map(capitalizeFirst);
                 if (newOpts.length > 0) {
                     setOptions(prev => [...new Set([...prev, ...newOpts])]);
                 }
             } catch (err) {
                 console.error('Chat API error:', err);
-                // Fallback message
                 const criteriaNote = extractedCriteria.length > 0
                     ? ` I also noticed some factors you care about – we'll review those in the next step.`
                     : '';
@@ -211,7 +205,6 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
         }
     };
 
-    // Move to Criteria Screen
     const handleConfirmOptions = () => {
         if (options.length < 2) return;
         setConfirmAction('criteria');
@@ -221,12 +214,11 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
     const proceedToCriteria = async () => {
         setShowConfirmModal(false);
         setScreen(SCREENS.CRITERIA);
-        setMessages([]); // Clear messages, will be populated by API
+        setMessages([]);
         setChatInput('');
         setIsTyping(true);
         
         try {
-            // Call chat API to get context-aware criteria suggestions
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -241,10 +233,8 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             });
             const data = await response.json();
             
-            // Use the AI-generated response with context-aware criteria suggestions
             setMessages([{ role: 'assistant', text: data.response }]);
             
-            // Auto-add any extracted criteria from the response
             const newCriteria = (data.suggestedCriteria || []).map(c => 
                 c.charAt(0).toUpperCase() + c.slice(1)
             );
@@ -253,7 +243,6 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
             }
         } catch (error) {
             console.error('Failed to get criteria suggestions:', error);
-            // Fallback to a simple prompt without hardcoded examples
             setMessages([{
                 role: 'assistant',
                 text: `Great! Now let's figure out what matters to you.\n\nWhat factors are important when comparing ${options.join(' and ')}?`
@@ -263,7 +252,6 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
         }
     };
 
-    // Final Submit
     const handleFinish = () => {
         if (criteria.length < 1) return;
         setConfirmAction('finish');
@@ -276,7 +264,6 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
         onNext({ options, criteria, userContext }, description, coreDilemma);
     };
 
-    // Chat Submit
     const handleChatSubmit = async () => {
         if (!chatInput.trim()) return;
 
@@ -302,7 +289,6 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
 
             setMessages(prev => [...prev, { role: 'assistant', text: data.response }]);
 
-            // Auto-add ONLY user-extracted items (not suggestions) - with refinement
             let newOptions = (data.suggestedOptions || []).map(capitalizeFirst);
             let newCriteria = (data.suggestedCriteria || []).map(capitalizeFirst);
 
@@ -322,12 +308,10 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
         }
     };
 
-    // Manual Add - with text refinement
     const handleManualAdd = async () => {
         let val = capitalizeFirst(manualInput.trim());
         if (!val) return;
 
-        // Refine the manually entered text
         const type = screen === SCREENS.OPTIONS ? 'option' : 'criterion';
         val = await refineText(type, val);
 
@@ -345,117 +329,69 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
     // ========== SCREEN 1: DILEMMA ==========
     if (screen === SCREENS.DILEMMA) {
         return (
-            <div className="screen-container dilemma-screen">
-                <div className="screen-content">
-                    <h1 className="brand">DilemmaWise</h1>
-                    <p className="subtitle">AI-powered decision support</p>
-
-                    <div className="dilemma-card">
-                        <label>What's the core question you're trying to answer?</label>
-                        <p className="helper-text">Keep it simple – just the decision question, not the details yet. We'll ask about options and criteria in the next steps.</p>
-                        <textarea
-                            value={dilemmaInput}
-                            onChange={handleDilemmaInputChange}
-                            placeholder='e.g., "Which phone should I buy?" or "Should I change jobs?"'
-                            rows={3}
-                            autoFocus
-                        />
-                        {inputGuidance && (
-                            <div className="input-guidance">
-                                {inputGuidance}
-                            </div>
-                        )}
-                        <button
-                            onClick={handleDilemmaSubmit}
-                            className="btn btn-primary btn-lg"
-                            disabled={!dilemmaInput.trim() || isAnalyzing}
-                        >
-                            {isAnalyzing ? 'Analyzing...' : 'Continue →'}
-                        </button>
-                    </div>
+            <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="max-w-2xl mx-auto"
+            >
+                <div className="text-center mb-8">
+                    <h1 className="text-3xl font-semibold text-foreground mb-2">
+                        What decision are you facing?
+                    </h1>
+                    <p className="text-muted-foreground">
+                        Describe your dilemma in a sentence or two. We'll help you break it down.
+                    </p>
                 </div>
-                <style jsx>{`
-                    .screen-container {
-                        min-height: 100vh;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        padding: 2rem;
-                        background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--muted)) 100%);
-                    }
-                    .screen-content {
-                        max-width: 600px;
-                        width: 100%;
-                        text-align: center;
-                    }
-                    .brand {
-                        font-size: 3rem;
-                        font-weight: 700;
-                        color: hsl(var(--primary));
-                        margin-bottom: 0.5rem;
-                    }
-                    .subtitle {
-                        font-size: 1.1rem;
-                        color: hsl(var(--foreground) / 0.6);
-                        margin-bottom: 3rem;
-                    }
-                    .dilemma-card {
-                        background: hsl(var(--card));
-                        padding: 2rem;
-                        border-radius: 1rem;
-                        border: 1px solid hsl(var(--border));
-                        box-shadow: 0 10px 40px rgba(0,0,0,0.08);
-                    }
-                    .dilemma-card label {
-                        display: block;
-                        text-align: left;
-                        font-weight: 600;
-                        margin-bottom: 0.75rem;
-                        font-size: 1.1rem;
-                    }
-                    .dilemma-card textarea {
-                        width: 100%;
-                        padding: 1rem;
-                        border-radius: 0.5rem;
-                        border: 1px solid hsl(var(--border));
-                        font-size: 1rem;
-                        resize: none;
-                        margin-bottom: 0.75rem;
-                        background: hsl(var(--background));
-                        color: hsl(var(--foreground));
-                    }
-                    .dilemma-card textarea:focus {
-                        outline: none;
-                        border-color: hsl(var(--primary));
-                        box-shadow: 0 0 0 3px hsl(var(--primary) / 0.1);
-                    }
-                    .helper-text {
-                        font-size: 0.85rem;
-                        color: hsl(var(--foreground) / 0.6);
-                        margin: -0.25rem 0 1rem;
-                        line-height: 1.4;
-                    }
-                    .input-guidance {
-                        background: hsl(45 90% 95%);
-                        border-left: 3px solid hsl(45 80% 50%);
-                        padding: 0.75rem 1rem;
-                        margin-bottom: 1rem;
-                        border-radius: 0 0.5rem 0.5rem 0;
-                        font-size: 0.9rem;
-                        color: hsl(30 60% 30%);
-                        animation: fadeIn 0.3s ease-out;
-                    }
-                    @keyframes fadeIn {
-                        from { opacity: 0; transform: translateY(-5px); }
-                        to { opacity: 1; transform: translateY(0); }
-                    }
-                    .btn-lg {
-                        width: 100%;
-                        padding: 1rem 2rem;
-                        font-size: 1.1rem;
-                    }
-                `}</style>
-            </div>
+
+                <Card className="p-8">
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                        Your decision question
+                    </label>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Keep it simple – just the core question, not the details yet. We'll ask about options and criteria next.
+                    </p>
+                    <textarea
+                        value={dilemmaInput}
+                        onChange={handleDilemmaInputChange}
+                        placeholder='e.g., "Which phone should I buy?" or "Should I change jobs?"'
+                        rows={4}
+                        autoFocus
+                        className="w-full px-4 py-3 rounded-xl border border-border bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                    />
+                    
+                    <AnimatePresence>
+                        {inputGuidance && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                className="mt-3 p-3 rounded-lg bg-warning/10 border-l-4 border-warning text-warning-foreground text-sm"
+                            >
+                                💡 {inputGuidance}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                    
+                    <Button
+                        onClick={handleDilemmaSubmit}
+                        disabled={!dilemmaInput.trim() || isAnalyzing}
+                        size="lg"
+                        className="w-full mt-6"
+                    >
+                        {isAnalyzing ? (
+                            <>
+                                <span className="animate-spin mr-2">⏳</span>
+                                Analyzing...
+                            </>
+                        ) : (
+                            <>
+                                Continue
+                                <ArrowRight className="ml-2 h-5 w-5" />
+                            </>
+                        )}
+                    </Button>
+                </Card>
+            </motion.div>
         );
     }
 
@@ -466,473 +402,296 @@ export default function InputPhase({ onNext, savedDescription, initialOptions = 
     const canProceed = isOptionsScreen ? options.length >= 2 : criteria.length >= 1;
 
     return (
-        <div className="screen-container split-screen">
+        <>
             {/* Confirmation Modal */}
-            {showConfirmModal && (
-                <div className="modal-overlay">
-                    <div className="modal-content">
-                        <h3>{confirmAction === 'criteria' ? '✓ Confirm Your Options' : '✓ Ready to Prioritize?'}</h3>
+            <AnimatePresence>
+                {showConfirmModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        onClick={() => setShowConfirmModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-warm-lg"
+                        >
+                            <h3 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
+                                <CheckCircle2 className="h-5 w-5 text-primary" />
+                                {confirmAction === 'criteria' ? 'Confirm Your Options' : 'Ready to Prioritize?'}
+                            </h3>
 
-                        {confirmAction === 'criteria' ? (
-                            <>
-                                <p>You've selected {options.length} options to compare:</p>
-                                <div className="modal-items">
-                                    {options.map((opt, i) => (
-                                        <span key={i} className="modal-chip option">{opt}</span>
-                                    ))}
-                                </div>
-                                <p className="modal-note">You won't be able to change these after proceeding.</p>
-                            </>
-                        ) : (
-                            <>
-                                <p>You've defined {criteria.length} criteria:</p>
-                                <div className="modal-items">
-                                    {criteria.map((crit, i) => (
-                                        <span key={i} className="modal-chip criterion">{crit}</span>
-                                    ))}
-                                </div>
-                                <p className="modal-note">Next, you'll rate your options and set priorities.</p>
-                            </>
-                        )}
+                            {confirmAction === 'criteria' ? (
+                                <>
+                                    <p className="text-muted-foreground mb-3">
+                                        You've selected {options.length} options to compare:
+                                    </p>
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        {options.map((opt, i) => (
+                                            <span key={i} className="px-3 py-1.5 rounded-full text-sm font-medium bg-primary/10 text-primary border border-primary/20">
+                                                {opt}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground italic">
+                                        You won't be able to change these after proceeding.
+                                    </p>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="text-muted-foreground mb-3">
+                                        You've defined {criteria.length} criteria:
+                                    </p>
+                                    <div className="flex flex-wrap gap-2 mb-4">
+                                        {criteria.map((crit, i) => (
+                                            <span key={i} className="px-3 py-1.5 rounded-full text-sm font-medium bg-accent/10 text-accent border border-accent/20">
+                                                {crit}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground italic">
+                                        Next, you'll rate your options and set priorities.
+                                    </p>
+                                </>
+                            )}
 
-                        <div className="modal-actions">
-                            <button
-                                className="btn btn-secondary"
-                                onClick={() => setShowConfirmModal(false)}
-                            >
-                                Go Back
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={confirmAction === 'criteria' ? proceedToCriteria : proceedToFinish}
-                            >
-                                {confirmAction === 'criteria' ? 'Confirm & Continue' : 'Start Prioritizing'}
-                            </button>
+                            <div className="flex gap-3 mt-6 justify-end">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setShowConfirmModal(false)}
+                                >
+                                    Go Back
+                                </Button>
+                                <Button
+                                    onClick={confirmAction === 'criteria' ? proceedToCriteria : proceedToFinish}
+                                >
+                                    {confirmAction === 'criteria' ? 'Confirm & Continue' : 'Start Prioritizing'}
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <div className="grid lg:grid-cols-[1fr,380px] gap-6 h-[calc(100vh-12rem)]">
+                {/* Left: Chat */}
+                <Card className="flex flex-col overflow-hidden">
+                    {/* Chat Header */}
+                    <div className="p-4 border-b border-border/60">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-semibold text-primary uppercase tracking-wide">
+                                {isOptionsScreen ? 'Step 1 of 2' : 'Step 2 of 2'}
+                            </span>
                         </div>
+                        <h2 className="text-xl font-semibold text-foreground">
+                            {isOptionsScreen ? 'Define Your Options' : 'Define Your Criteria'}
+                        </h2>
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                            {coreDilemma}
+                        </p>
                     </div>
-                </div>
-            )}
 
-            {/* Left: Chat */}
-            <div className="chat-section">
-                <div className="chat-header">
-                    <span className="step-badge">{isOptionsScreen ? 'Step 2 of 3' : 'Step 3 of 3'}</span>
-                    <h2>{isOptionsScreen ? 'Define Your Options' : 'Define Your Criteria'}</h2>
-                    <p className="dilemma-display">{coreDilemma}</p>
-                </div>
-
-                <div className="chat-messages">
-                    {messages.map((msg, idx) => (
-                        <div key={idx} className={`chat-message ${msg.role}`}>
-                            <div className="message-bubble">
-                                {msg.text.split(/(\[\[Option:[^\]]+\]\]|\[\[Criterion:[^\]]+\]\]|\[\[[^\]]+\]\])/g).map((part, i) => {
-                                    const optionMatch = part.match(/^\[\[Option:([^\]]+)\]\]$/);
-                                    if (optionMatch) {
-                                        const name = optionMatch[1];
-                                        const exists = options.includes(name) || options.includes(capitalizeFirst(name));
-                                        
-                                        // In CRITERIA phase, if option already exists, show as plain text for natural flow
-                                        if (screen === SCREENS.CRITERIA && exists) {
-                                            return <span key={i}>{name}</span>;
+                    {/* Chat Messages */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        {messages.map((msg, idx) => (
+                            <motion.div
+                                key={idx}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className={cn(
+                                    "flex",
+                                    msg.role === 'user' ? "justify-end" : "justify-start"
+                                )}
+                            >
+                                <div className={cn(
+                                    "max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed",
+                                    msg.role === 'user'
+                                        ? "bg-primary text-primary-foreground rounded-br-md"
+                                        : "bg-secondary/50 text-foreground rounded-bl-md"
+                                )}>
+                                    {msg.text.split(/(\[\[Option:[^\]]+\]\]|\[\[Criterion:[^\]]+\]\]|\[\[[^\]]+\]\])/g).map((part, i) => {
+                                        const optionMatch = part.match(/^\[\[Option:([^\]]+)\]\]$/);
+                                        if (optionMatch) {
+                                            const name = optionMatch[1];
+                                            const exists = options.includes(name) || options.includes(capitalizeFirst(name));
+                                            
+                                            if (screen === SCREENS.CRITERIA && exists) {
+                                                return <span key={i}>{name}</span>;
+                                            }
+                                            
+                                            return (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => !exists && setOptions(prev => [...new Set([...prev, capitalizeFirst(name)])])}
+                                                    className={cn(
+                                                        "inline-flex items-center gap-1 px-2 py-0.5 mx-1 rounded text-xs font-semibold border transition-all",
+                                                        exists
+                                                            ? "bg-muted text-muted-foreground border-border cursor-default"
+                                                            : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 cursor-pointer"
+                                                    )}
+                                                >
+                                                    {exists ? <CheckCircle2 className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+                                                    {name}
+                                                </button>
+                                            );
                                         }
-                                        
-                                        return (
-                                            <button key={i}
-                                                onClick={() => !exists && setOptions(prev => [...new Set([...prev, capitalizeFirst(name)])])}
-                                                className={`tag-btn option ${exists ? 'added' : ''}`}>
-                                                {exists ? '✓' : '+'} {name}
-                                            </button>
-                                        );
-                                    }
-                                    const criterionMatch = part.match(/^\[\[Criterion:([^\]]+)\]\]$/);
-                                    if (criterionMatch) {
-                                        const name = criterionMatch[1];
-                                        const exists = criteria.includes(name) || criteria.includes(capitalizeFirst(name));
-                                        return (
-                                            <button key={i}
-                                                onClick={() => !exists && setCriteria(prev => [...new Set([...prev, capitalizeFirst(name)])])}
-                                                className={`tag-btn criterion ${exists ? 'added' : ''}`}>
-                                                {exists ? '✓' : '✨'} {name}
-                                            </button>
-                                        );
-                                    }
-                                    // Handle simple brackets [[Name]] - just remove brackets for plain text display
-                                    const simpleBracketMatch = part.match(/^\[\[([^\]]+)\]\]$/);
-                                    if (simpleBracketMatch) {
-                                        return simpleBracketMatch[1];
-                                    }
-                                    return part;
-                                })}
-                            </div>
-                        </div>
-                    ))}
-                    {isTyping && (
-                        <div className="chat-message assistant">
-                            <div className="message-bubble typing">
-                                <span>•</span><span>•</span><span>•</span>
-                            </div>
-                        </div>
-                    )}
-                    <div ref={messagesEndRef} />
-                </div>
-
-                <div className="chat-input-area">
-                    <input
-                        type="text"
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleChatSubmit()}
-                        placeholder="Ask for suggestions or tell me more..."
-                    />
-                    <button onClick={handleChatSubmit} className="btn btn-primary" disabled={!chatInput.trim() || isTyping}>
-                        ↑
-                    </button>
-                </div>
-            </div>
-
-            {/* Right: Basket */}
-            <div className="basket-section">
-                <div className="basket-card">
-                    <h3>{isOptionsScreen ? '🎯 Your Options' : '📊 Your Criteria'}</h3>
-                    <p className="basket-hint">
-                        {isOptionsScreen
-                            ? 'Add at least 2 options to compare'
-                            : 'Add at least 1 factor that matters to you'}
-                    </p>
-
-                    <div className="basket-items">
-                        {currentItems.map((item, i) => (
-                            <div key={i} className={`chip ${isOptionsScreen ? 'option' : 'criterion'}`}>
-                                {item}
-                                <button
-                                    onClick={() => isOptionsScreen ? handleRemoveOption(item) : handleRemoveCriterion(item)}
-                                    className="chip-remove">×</button>
-                            </div>
+                                        const criterionMatch = part.match(/^\[\[Criterion:([^\]]+)\]\]$/);
+                                        if (criterionMatch) {
+                                            const name = criterionMatch[1];
+                                            const exists = criteria.includes(name) || criteria.includes(capitalizeFirst(name));
+                                            return (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => !exists && setCriteria(prev => [...new Set([...prev, capitalizeFirst(name)])])}
+                                                    className={cn(
+                                                        "inline-flex items-center gap-1 px-2 py-0.5 mx-1 rounded text-xs font-semibold border transition-all",
+                                                        exists
+                                                            ? "bg-muted text-muted-foreground border-border cursor-default"
+                                                            : "bg-accent/10 text-accent border-accent/20 hover:bg-accent/20 cursor-pointer"
+                                                    )}
+                                                >
+                                                    {exists ? <CheckCircle2 className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+                                                    {name}
+                                                </button>
+                                            );
+                                        }
+                                        const simpleBracketMatch = part.match(/^\[\[([^\]]+)\]\]$/);
+                                        if (simpleBracketMatch) {
+                                            return simpleBracketMatch[1];
+                                        }
+                                        return part;
+                                    })}
+                                </div>
+                            </motion.div>
                         ))}
-                        {currentItems.length === 0 && (
-                            <p className="empty-state">No {itemLabel}s added yet</p>
+                        {isTyping && (
+                            <div className="flex justify-start">
+                                <div className="bg-secondary/50 px-4 py-3 rounded-2xl rounded-bl-md">
+                                    <div className="flex gap-1">
+                                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                        <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    </div>
+                                </div>
+                            </div>
                         )}
+                        <div ref={messagesEndRef} />
                     </div>
 
-                    <div className="manual-add">
-                        <input
-                            type="text"
-                            value={manualInput}
-                            onChange={(e) => setManualInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleManualAdd()}
-                            placeholder={`Add ${itemLabel} manually...`}
-                        />
-                        <button onClick={handleManualAdd} className="btn-add">+</button>
+                    {/* Chat Input */}
+                    <div className="p-4 border-t border-border/60">
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                value={chatInput}
+                                onChange={(e) => setChatInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleChatSubmit()}
+                                placeholder="Ask for suggestions or tell me more..."
+                                className="flex-1 px-4 py-2.5 rounded-xl border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                            />
+                            <Button 
+                                onClick={handleChatSubmit} 
+                                disabled={!chatInput.trim() || isTyping}
+                                size="icon"
+                                className="shrink-0"
+                            >
+                                <Send className="h-4 w-4" />
+                            </Button>
+                        </div>
                     </div>
+                </Card>
+
+                {/* Right: Basket */}
+                <div className="flex flex-col gap-4">
+                    <Card className="flex-1 p-5 flex flex-col">
+                        <div className="flex items-center gap-2 mb-1">
+                            {isOptionsScreen ? (
+                                <Target className="h-5 w-5 text-primary" />
+                            ) : (
+                                <Sparkles className="h-5 w-5 text-accent" />
+                            )}
+                            <h3 className="font-semibold text-foreground">
+                                {isOptionsScreen ? 'Your Options' : 'Your Criteria'}
+                            </h3>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-4">
+                            {isOptionsScreen
+                                ? 'Add at least 2 options to compare'
+                                : 'Add at least 1 factor that matters to you'}
+                        </p>
+
+                        <div className="flex-1 overflow-y-auto">
+                            <div className="flex flex-wrap gap-2">
+                                <AnimatePresence>
+                                    {currentItems.map((item, i) => (
+                                        <motion.div
+                                            key={item}
+                                            initial={{ opacity: 0, scale: 0.8 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0, scale: 0.8 }}
+                                            className={cn(
+                                                "inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium border",
+                                                isOptionsScreen
+                                                    ? "bg-primary/10 text-primary border-primary/20"
+                                                    : "bg-accent/10 text-accent border-accent/20"
+                                            )}
+                                        >
+                                            {item}
+                                            <button
+                                                onClick={() => isOptionsScreen ? handleRemoveOption(item) : handleRemoveCriterion(item)}
+                                                className="opacity-60 hover:opacity-100 transition-opacity"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                            </button>
+                                        </motion.div>
+                                    ))}
+                                </AnimatePresence>
+                                {currentItems.length === 0 && (
+                                    <p className="text-sm text-muted-foreground italic">
+                                        No {itemLabel}s added yet
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Manual Add */}
+                        <div className="mt-4 pt-4 border-t border-border/60">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={manualInput}
+                                    onChange={(e) => setManualInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleManualAdd()}
+                                    placeholder={`Add ${itemLabel} manually...`}
+                                    className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                                />
+                                <Button 
+                                    onClick={handleManualAdd}
+                                    variant="outline"
+                                    size="icon"
+                                    className="shrink-0"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    </Card>
+
+                    <Button
+                        onClick={isOptionsScreen ? handleConfirmOptions : handleFinish}
+                        disabled={!canProceed}
+                        size="lg"
+                        className="w-full"
+                    >
+                        {isOptionsScreen ? 'Confirm Options & Continue' : 'Finish & Continue'}
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
                 </div>
-
-                <button
-                    onClick={isOptionsScreen ? handleConfirmOptions : handleFinish}
-                    className="btn btn-primary btn-proceed"
-                    disabled={!canProceed}
-                >
-                    {isOptionsScreen ? 'Confirm Options & Continue →' : 'Finish & Continue →'}
-                </button>
             </div>
-
-            <style jsx>{`
-                .split-screen {
-                    display: grid;
-                    grid-template-columns: 1fr 400px;
-                    height: 100vh;
-                    background: hsl(var(--background));
-                }
-                .chat-section {
-                    display: flex;
-                    flex-direction: column;
-                    border-right: 1px solid hsl(var(--border));
-                }
-                .chat-header {
-                    padding: 1.5rem;
-                    border-bottom: 1px solid hsl(var(--border));
-                    background: hsl(var(--card));
-                }
-                .step-badge {
-                    font-size: 0.75rem;
-                    font-weight: 600;
-                    color: hsl(var(--primary));
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                }
-                .chat-header h2 {
-                    font-size: 1.5rem;
-                    font-weight: 700;
-                    margin: 0.25rem 0;
-                }
-                .dilemma-display {
-                    font-size: 0.95rem;
-                    color: hsl(var(--foreground) / 0.7);
-                    margin: 0;
-                }
-                .chat-messages {
-                    flex: 1;
-                    overflow-y: auto;
-                    padding: 1.5rem;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 1rem;
-                }
-                .chat-input-area {
-                    padding: 1rem;
-                    border-top: 1px solid hsl(var(--border));
-                    display: flex;
-                    gap: 0.5rem;
-                    background: hsl(var(--card));
-                }
-                .chat-input-area input {
-                    flex: 1;
-                    padding: 0.75rem 1rem;
-                    border-radius: 0.5rem;
-                    border: 1px solid hsl(var(--border));
-                    font-size: 1rem;
-                    background: hsl(var(--background));
-                    color: hsl(var(--foreground));
-                }
-                .chat-input-area input:focus {
-                    outline: none;
-                    border-color: hsl(var(--primary));
-                }
-                .chat-message { display: flex; }
-                .chat-message.user { justify-content: flex-end; }
-                .chat-message.assistant { justify-content: flex-start; }
-                .message-bubble {
-                    max-width: 85%;
-                    padding: 1rem 1.25rem;
-                    border-radius: 1rem;
-                    font-size: 0.95rem;
-                    line-height: 1.6;
-                    background: hsl(var(--card));
-                    border: 1px solid hsl(var(--border));
-                }
-                .user .message-bubble {
-                    background: hsl(var(--primary));
-                    color: white;
-                    border: none;
-                }
-                .tag-btn {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 4px;
-                    padding: 2px 8px;
-                    margin: 0 3px;
-                    border-radius: 4px;
-                    font-size: 0.9em;
-                    font-weight: 600;
-                    cursor: pointer;
-                    border: 1px solid;
-                    transition: all 0.15s;
-                }
-                .tag-btn.option {
-                    background: hsl(var(--primary) / 0.1);
-                    color: hsl(var(--primary));
-                    border-color: hsl(var(--primary) / 0.2);
-                }
-                .tag-btn.criterion {
-                    background: hsl(280 70% 60% / 0.1);
-                    color: hsl(280 70% 60%);
-                    border-color: hsl(280 70% 60% / 0.2);
-                }
-                .tag-btn.added {
-                    background: hsl(var(--muted));
-                    color: hsl(var(--foreground) / 0.4);
-                    border-color: hsl(var(--border));
-                    cursor: default;
-                }
-                .tag-btn:not(.added):hover {
-                    transform: scale(1.05);
-                }
-                .typing span {
-                    animation: blink 1.4s infinite both;
-                    margin: 0 2px;
-                    font-size: 1.5rem;
-                }
-                .typing span:nth-child(2) { animation-delay: 0.2s; }
-                .typing span:nth-child(3) { animation-delay: 0.4s; }
-                @keyframes blink { 0% { opacity: 0.2; } 20% { opacity: 1; } 100% { opacity: 0.2; } }
-
-                .basket-section {
-                    padding: 1.5rem;
-                    display: flex;
-                    flex-direction: column;
-                    background: hsl(var(--muted) / 0.3);
-                }
-                .basket-card {
-                    flex: 1;
-                    background: hsl(var(--card));
-                    border-radius: 1rem;
-                    padding: 1.5rem;
-                    border: 1px solid hsl(var(--border));
-                }
-                .basket-card h3 {
-                    font-size: 1.2rem;
-                    margin-bottom: 0.5rem;
-                }
-                .basket-hint {
-                    font-size: 0.85rem;
-                    color: hsl(var(--foreground) / 0.6);
-                    margin-bottom: 1.5rem;
-                }
-                .basket-items {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 0.5rem;
-                    min-height: 100px;
-                    margin-bottom: 1rem;
-                }
-                .empty-state {
-                    font-size: 0.9rem;
-                    color: hsl(var(--foreground) / 0.4);
-                    font-style: italic;
-                }
-                .chip {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    padding: 0.4rem 0.8rem;
-                    border-radius: 999px;
-                    font-size: 0.9rem;
-                    font-weight: 500;
-                }
-                .chip.option {
-                    background: hsl(var(--primary) / 0.1);
-                    color: hsl(var(--primary));
-                    border: 1px solid hsl(var(--primary) / 0.2);
-                }
-                .chip.criterion {
-                    background: hsl(280 70% 60% / 0.1);
-                    color: hsl(280 70% 60%);
-                    border: 1px solid hsl(280 70% 60% / 0.2);
-                }
-                .chip-remove {
-                    background: none;
-                    border: none;
-                    cursor: pointer;
-                    opacity: 0.5;
-                    font-size: 1rem;
-                    line-height: 1;
-                }
-                .chip-remove:hover { opacity: 1; }
-                .manual-add {
-                    display: flex;
-                    gap: 0.5rem;
-                }
-                .manual-add input {
-                    flex: 1;
-                    padding: 0.6rem 0.8rem;
-                    border-radius: 0.5rem;
-                    border: 1px solid hsl(var(--border));
-                    font-size: 0.9rem;
-                    background: hsl(var(--background));
-                    color: hsl(var(--foreground));
-                }
-                .btn-add {
-                    padding: 0.6rem 1rem;
-                    border-radius: 0.5rem;
-                    border: 1px solid hsl(var(--border));
-                    background: hsl(var(--secondary));
-                    cursor: pointer;
-                    font-size: 1rem;
-                }
-                .btn-proceed {
-                    margin-top: 1rem;
-                    width: 100%;
-                    padding: 1rem;
-                }
-
-                /* Modal Styles */
-                .modal-overlay {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0, 0, 0, 0.5);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 1000;
-                    backdrop-filter: blur(4px);
-                }
-                .modal-content {
-                    background: hsl(var(--card));
-                    border-radius: 1rem;
-                    padding: 2rem;
-                    max-width: 500px;
-                    width: 90%;
-                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-                    border: 1px solid hsl(var(--border));
-                }
-                .modal-content h3 {
-                    font-size: 1.4rem;
-                    margin-bottom: 1rem;
-                    color: hsl(var(--foreground));
-                }
-                .modal-content p {
-                    color: hsl(var(--foreground) / 0.8);
-                    margin-bottom: 0.75rem;
-                }
-                .modal-items {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 0.5rem;
-                    margin: 1rem 0;
-                }
-                .modal-chip {
-                    padding: 0.4rem 0.8rem;
-                    border-radius: 999px;
-                    font-size: 0.9rem;
-                    font-weight: 500;
-                }
-                .modal-chip.option {
-                    background: hsl(var(--primary) / 0.15);
-                    color: hsl(var(--primary));
-                    border: 1px solid hsl(var(--primary) / 0.3);
-                }
-                .modal-chip.criterion {
-                    background: hsl(280 70% 60% / 0.15);
-                    color: hsl(280 70% 60%);
-                    border: 1px solid hsl(280 70% 60% / 0.3);
-                }
-                .modal-note {
-                    font-size: 0.85rem;
-                    color: hsl(var(--foreground) / 0.6);
-                    font-style: italic;
-                }
-                .modal-actions {
-                    display: flex;
-                    gap: 1rem;
-                    margin-top: 1.5rem;
-                    justify-content: flex-end;
-                }
-                .btn-secondary {
-                    padding: 0.75rem 1.5rem;
-                    border-radius: 0.5rem;
-                    border: 1px solid hsl(var(--border));
-                    background: hsl(var(--secondary));
-                    color: hsl(var(--foreground));
-                    cursor: pointer;
-                    font-size: 0.95rem;
-                }
-                .btn-secondary:hover {
-                    background: hsl(var(--muted));
-                }
-
-                @media (max-width: 900px) {
-                    .split-screen {
-                        grid-template-columns: 1fr;
-                        grid-template-rows: 1fr auto;
-                    }
-                    .basket-section {
-                        max-height: 40vh;
-                        overflow-y: auto;
-                    }
-                }
-            `}</style>
-        </div>
+        </>
     );
 }
