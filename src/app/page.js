@@ -1,13 +1,28 @@
 "use client";
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import InputPhase from '@/components/InputPhase';
 import CriteriaPhase from '@/components/CriteriaPhase';
 import ElicitationPhase from '@/components/ElicitationPhase';
 import ExplanationView from '@/components/ExplanationView';
+import { LandingPage } from '@/components/LandingPage';
+import { AppShell } from '@/components/AppShell';
+
+const pageVariants = {
+    initial: { opacity: 0, y: 10 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -10 },
+};
+
+const pageTransition = {
+    type: 'tween',
+    ease: 'easeInOut',
+    duration: 0.3,
+};
 
 export default function Home() {
-    // Phases: input, criteria, rating, explanation, editOptions
-    const [phase, setPhase] = useState('input');
+    // Phases: landing, input, criteria, rating, explanation, editOptions
+    const [phase, setPhase] = useState('landing');
     const [data, setData] = useState({
         options: [],
         criteria: [],
@@ -18,6 +33,10 @@ export default function Home() {
     const [dilemma, setDilemma] = useState('');
     const [savedDescription, setSavedDescription] = useState('');
     const [results, setResults] = useState(null);
+
+    const handleStartDecision = () => {
+        setPhase('input');
+    };
 
     const handleExtraction = (extractedData, description, coreDilemma) => {
         setData(extractedData);
@@ -72,11 +91,12 @@ export default function Home() {
     };
 
     const handleReset = () => {
-        setPhase('input');
+        setPhase('landing');
         setData({ options: [], criteria: [], userContext: {} });
         setWeights({});
         setSavedScores(null);
         setSavedDescription('');
+        setDilemma('');
         setResults(null);
     };
 
@@ -97,82 +117,74 @@ export default function Home() {
         setPhase('criteria');
     };
 
-    const getPhaseIndex = () => {
-        const phases = ['input', 'criteria', 'rating', 'explanation'];
-        return phases.indexOf(phase);
-    };
+    // Show Landing Page
+    if (phase === 'landing') {
+        return <LandingPage onStartDecision={handleStartDecision} />;
+    }
 
+    // App flow wrapped in AppShell
     return (
-        <main style={{ minHeight: '100vh', padding: '2rem', background: 'hsl(var(--background))' }}>
-            <div className="container">
-                {/* Progress Indicator */}
-                {phase !== 'input' && phase !== 'editOptions' && (
-                    <div className="progress-container">
-                        {[0, 1, 2, 3].map((idx) => (
-                            <div
-                                key={idx}
-                                className={`progress-step ${idx < getPhaseIndex() ? 'completed' : ''} ${idx === getPhaseIndex() ? 'active' : ''}`}
-                            />
-                        ))}
-                    </div>
-                )}
+        <AppShell currentPhase={phase} onStartOver={handleReset}>
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={phase}
+                    variants={pageVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    transition={pageTransition}
+                    className="w-full"
+                >
+                    {/* Phase Content */}
+                    {phase === 'input' && (
+                        <InputPhase onNext={handleExtraction} savedDescription={savedDescription} />
+                    )}
 
-                {/* Header with Logo (except on input page) */}
-                {phase !== 'input' && phase !== 'editOptions' && (
-                    <header style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                        <div className="logo" style={{ fontSize: '2rem' }}>DilemmaWise</div>
-                    </header>
-                )}
+                    {phase === 'editOptions' && (
+                        <InputPhase
+                            onNext={(data) => handleEditComplete(data)}
+                            savedDescription={savedDescription}
+                            initialOptions={data.options}
+                            initialCriteria={data.criteria}
+                        />
+                    )}
 
-                {/* Phase Content */}
-                {phase === 'input' && (
-                    <InputPhase onNext={handleExtraction} savedDescription={savedDescription} />
-                )}
+                    {phase === 'criteria' && (
+                        <CriteriaPhase
+                            criteria={data.criteria}
+                            onNext={handleCriteriaComplete}
+                            onBack={() => setPhase('input')}
+                            savedWeights={weights}
+                        />
+                    )}
 
-                {phase === 'editOptions' && (
-                    <InputPhase
-                        onNext={(data) => handleEditComplete(data)}
-                        savedDescription={savedDescription}
-                        initialOptions={data.options}
-                        initialCriteria={data.criteria}
-                    />
-                )}
+                    {phase === 'rating' && (
+                        <ElicitationPhase
+                            options={data.options}
+                            criteria={data.criteria}
+                            weights={weights}
+                            savedDescription={savedDescription}
+                            dilemma={dilemma}
+                            userContext={data.userContext || {}}
+                            onComplete={handleAnalyze}
+                            onBack={() => setPhase('criteria')}
+                        />
+                    )}
 
-                {phase === 'criteria' && (
-                    <CriteriaPhase
-                        criteria={data.criteria}
-                        onNext={handleCriteriaComplete}
-                        onBack={() => setPhase('input')}
-                        savedWeights={weights}
-                    />
-                )}
-
-                {phase === 'rating' && (
-                    <ElicitationPhase
-                        options={data.options}
-                        criteria={data.criteria}
-                        weights={weights}
-                        savedDescription={savedDescription}
-                        dilemma={dilemma}
-                        userContext={data.userContext || {}}
-                        onComplete={handleAnalyze}
-                        onBack={() => setPhase('criteria')}
-                    />
-                )}
-
-                {phase === 'explanation' && results && (
-                    <ExplanationView
-                        results={results}
-                        userContext={data.userContext || {}}
-                        dilemma={dilemma}
-                        options={data.options}
-                        criteria={data.criteria}
-                        onReset={handleReset}
-                        onBackToRating={() => setPhase('rating')}
-                        onEditOptions={handleEditOptions}
-                    />
-                )}
-            </div>
-        </main>
+                    {phase === 'explanation' && results && (
+                        <ExplanationView
+                            results={results}
+                            userContext={data.userContext || {}}
+                            dilemma={dilemma}
+                            options={data.options}
+                            criteria={data.criteria}
+                            onReset={handleReset}
+                            onBackToRating={() => setPhase('rating')}
+                            onEditOptions={handleEditOptions}
+                        />
+                    )}
+                </motion.div>
+            </AnimatePresence>
+        </AppShell>
     );
 }
