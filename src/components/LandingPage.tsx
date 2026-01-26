@@ -173,10 +173,13 @@ export function LandingPage({ onStartDecision }: LandingPageProps) {
             </div>
 
             {/* Final result */}
-            <motion.div variants={itemVariants} className="mt-12 ml-22 pl-6 border-l-2 border-accent/30">
-              <div className="flex items-center gap-3 text-accent-foreground">
-                <div className="w-3 h-3 rounded-full bg-accent" />
-                <span className="font-semibold">Get ranked results + explanation</span>
+            <motion.div variants={itemVariants} className="mt-8 flex gap-6 items-start">
+              <div className="flex-shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-green-500/20 to-green-500/5 border border-green-500/30 flex items-center justify-center">
+                <span className="text-lg font-bold text-green-600">✓</span>
+              </div>
+              <div className="pt-3">
+                <h3 className="text-lg font-semibold text-foreground mb-1">Get your results</h3>
+                <p className="text-muted-foreground">Ranked options with clear explanations of why</p>
               </div>
             </motion.div>
           </div>

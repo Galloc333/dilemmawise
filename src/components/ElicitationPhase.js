@@ -211,8 +211,8 @@ export default function ElicitationPhase({ options, criteria, weights, onComplet
                     <h3 className="font-semibold text-foreground mb-4">How it works</h3>
                     <div className="space-y-4">
                         {[
-                            { num: 1, title: 'Natural conversation', desc: "I'll ask conversational questions, not boring forms" },
-                            { num: 2, title: `Just ${Math.floor(criteria.length + 2)} questions max`, desc: 'Short and focused' },
+                            { num: 1, title: 'Natural conversation', desc: "I'll ask conversational questions" },
+                            { num: 2, title: `Just ${Math.floor(criteria.length)} questions`, desc: 'Short and focused' },
                             { num: 3, title: 'Weighted-sum analysis', desc: 'Your inputs are passed into a weighted-sum algorithm to compute which option fits you best' },
                         ].map((step) => (
                             <div key={step.num} className="flex gap-4 items-start">
