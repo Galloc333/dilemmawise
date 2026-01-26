@@ -216,13 +216,30 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
                 >
                     {/* Winner Announcement */}
                     <div className="text-center mb-8">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gold/10 text-gold border border-gold/20 font-semibold text-sm mb-4">
-                            <Trophy className="h-4 w-4" />
+                        {/* Weighted Sum Result Badge - Top */}
+                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-100/80 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-700/40 font-medium text-sm mb-6">
+                            <BarChart3 className="h-3.5 w-3.5" />
                             Weighted Sum Result
                         </div>
-                        <h1 className="text-4xl md:text-5xl font-bold text-primary mb-2">
-                            {calculations.winner.option}
-                        </h1>
+                        
+                        {/* Winner Name with Trophy Badge */}
+                        <div className="flex items-center justify-center gap-4 mb-3">
+                            {/* Trophy Badge */}
+                            <div className="relative shrink-0">
+                                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 shadow-lg shadow-amber-500/30 flex items-center justify-center ring-2 ring-amber-300/40">
+                                    <Trophy className="h-7 w-7 text-amber-950" />
+                                </div>
+                                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-[9px] font-bold text-white uppercase tracking-wide shadow-sm whitespace-nowrap">
+                                    #1
+                                </div>
+                            </div>
+                            
+                            {/* Winner Name */}
+                            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-clip-text text-transparent">
+                                {calculations.winner.option}
+                            </h1>
+                        </div>
+                        
                         <p className="text-muted-foreground">
                             Based on your weights and ratings
                         </p>
@@ -234,44 +251,88 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
                             Final Ranking
                         </h2>
                         <div className="space-y-3">
-                            {ranking.map((item, idx) => (
-                                <motion.div
-                                    key={item.option}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: idx * 0.1 }}
-                                    className={cn(
-                                        "flex items-center gap-4 p-4 rounded-xl border transition-all",
-                                        idx === 0
-                                            ? "bg-gradient-to-r from-primary/5 to-accent/5 border-primary/20"
-                                            : "bg-secondary/30 border-border/50"
-                                    )}
-                                >
-                                    <div className="text-3xl w-12 text-center">
-                                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
-                                    </div>
-                                    <div className="flex-1">
+                            {ranking.map((item, idx) => {
+                                // Custom badge styling based on rank
+                                const getBadgeStyle = (rank) => {
+                                    if (rank === 0) return {
+                                        bg: "bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600",
+                                        shadow: "shadow-lg shadow-amber-500/30",
+                                        text: "text-amber-950",
+                                        ring: "ring-2 ring-amber-300/50"
+                                    };
+                                    if (rank === 1) return {
+                                        bg: "bg-gradient-to-br from-slate-300 via-gray-400 to-slate-500",
+                                        shadow: "shadow-md shadow-slate-400/30",
+                                        text: "text-slate-900",
+                                        ring: "ring-2 ring-slate-300/50"
+                                    };
+                                    if (rank === 2) return {
+                                        bg: "bg-gradient-to-br from-amber-600 via-orange-700 to-amber-800",
+                                        shadow: "shadow-md shadow-amber-700/30",
+                                        text: "text-amber-100",
+                                        ring: "ring-2 ring-amber-500/50"
+                                    };
+                                    return {
+                                        bg: "bg-secondary",
+                                        shadow: "",
+                                        text: "text-muted-foreground",
+                                        ring: ""
+                                    };
+                                };
+                                const badge = getBadgeStyle(idx);
+                                
+                                return (
+                                    <motion.div
+                                        key={item.option}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: idx * 0.1 }}
+                                        className={cn(
+                                            "flex items-center gap-4 p-4 rounded-xl border transition-all",
+                                            idx === 0
+                                                ? "bg-gradient-to-r from-amber-50/80 to-orange-50/50 border-amber-200/60 dark:from-amber-950/20 dark:to-orange-950/10 dark:border-amber-800/30"
+                                                : "bg-secondary/30 border-border/50"
+                                        )}
+                                    >
+                                        {/* Custom Medal Badge */}
                                         <div className={cn(
-                                            "font-semibold",
-                                            idx === 0 ? "text-xl" : "text-lg"
+                                            "w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg shrink-0",
+                                            badge.bg, badge.shadow, badge.text, badge.ring
                                         )}>
-                                            {item.option}
-                                        </div>
-                                        <div className="text-sm text-muted-foreground">
-                                            Score: {item.score.toFixed(1)} / {maxPossibleScore}
-                                        </div>
-                                    </div>
-                                    <div className="w-28">
-                                        <Progress 
-                                            value={(item.score / maxPossibleScore) * 100} 
-                                            className={cn(
-                                                "h-2",
-                                                idx === 0 ? "[&>div]:bg-primary" : "[&>div]:bg-muted-foreground/30"
+                                            {idx < 3 ? (
+                                                <span className="flex flex-col items-center leading-none">
+                                                    <Trophy className="h-5 w-5 mb-0.5" />
+                                                    <span className="text-[10px] font-black">{idx + 1}</span>
+                                                </span>
+                                            ) : (
+                                                <span className="text-base font-bold">{idx + 1}</span>
                                             )}
-                                        />
-                                    </div>
-                                </motion.div>
-                            ))}
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className={cn(
+                                                "font-semibold",
+                                                idx === 0 ? "text-xl text-amber-900 dark:text-amber-100" : "text-lg"
+                                            )}>
+                                                {item.option}
+                                            </div>
+                                            <div className="text-sm text-muted-foreground">
+                                                Score: {item.score.toFixed(1)} / {maxPossibleScore}
+                                            </div>
+                                        </div>
+                                        <div className="w-28">
+                                            <Progress 
+                                                value={(item.score / maxPossibleScore) * 100} 
+                                                className={cn(
+                                                    "h-2.5 rounded-full",
+                                                    idx === 0 
+                                                        ? "[&>div]:bg-gradient-to-r [&>div]:from-amber-500 [&>div]:to-orange-500" 
+                                                        : "[&>div]:bg-muted-foreground/30"
+                                                )}
+                                            />
+                                        </div>
+                                    </motion.div>
+                                );
+                            })}
                         </div>
                     </Card>
 
