@@ -8,6 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { CircularProgress } from '@/components/ui/circular-progress';
 import { cn } from '@/lib/utils';
+import { handleApiError } from '@/lib/apiErrors';
 
 export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }) {
   const [weights, setWeights] = useState(
@@ -31,7 +32,8 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
           setExplanations(data);
         }
       } catch (err) {
-        console.error('Failed to fetch explanations', err);
+        // Non-critical error - explanations are optional
+        handleApiError(err, 'explain-criteria');
       } finally {
         setLoadingExplanations(false);
       }

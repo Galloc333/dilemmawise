@@ -14,11 +14,13 @@ import {
   ChevronUp,
   BarChart3,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
+import { handleApiError } from '@/lib/apiErrors';
 
 export default function ElicitationPhase({
   options,
@@ -92,7 +94,7 @@ export default function ElicitationPhase({
       setContextAnalysis(data);
       return data;
     } catch (error) {
-      console.error('Failed to analyze context:', error);
+      handleApiError(error, 'analyze-context');
       return { needs_more_context: true, questions: [], placeholder_hint: null };
     } finally {
       setLoading(false);
@@ -121,8 +123,10 @@ export default function ElicitationPhase({
       setBudget(data.budget || 0);
       setStage('questions');
     } catch (error) {
-      console.error('Failed to generate questions:', error);
-      alert('Failed to start elicitation. Please try again.');
+      handleApiError(error, 'generate-questions');
+      toast.error('Failed to start rating', {
+        description: 'Please try again or go back and modify your criteria.',
+      });
     } finally {
       setLoading(false);
     }
@@ -184,8 +188,10 @@ export default function ElicitationPhase({
       setInferredRatings(data);
       setStage('complete');
     } catch (error) {
-      console.error('Failed to infer ratings:', error);
-      alert('Failed to process your responses. Please try again.');
+      handleApiError(error, 'infer-ratings');
+      toast.error('Failed to process ratings', {
+        description: 'Please try answering the questions again.',
+      });
     } finally {
       setLoading(false);
     }
@@ -355,10 +361,37 @@ export default function ElicitationPhase({
   // ========== GENERATING STAGE ==========
   if (stage === 'generating') {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-16 text-center">
-        <div className="mx-auto mb-6 h-12 w-12 animate-spin rounded-full border-4 border-primary/30 border-t-primary" />
-        <h2 className="mb-2 text-xl font-semibold text-foreground">Preparing your questions...</h2>
-        <p className="text-muted-foreground">This will just take a moment</p>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="mx-auto max-w-2xl py-8"
+      >
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-primary/30 border-t-primary" />
+          <h2 className="mb-2 text-xl font-semibold text-foreground">Preparing your questions...</h2>
+          <p className="text-muted-foreground">Analyzing your criteria and options</p>
+        </div>
+
+        {/* Preview skeleton of what questions will look like */}
+        <Card className="p-6">
+          <div className="space-y-4">
+            <div className="h-5 w-3/4 animate-pulse rounded bg-muted/50" />
+            <div className="h-4 w-1/2 animate-pulse rounded bg-muted/50" />
+
+            <div className="mt-6 space-y-3">
+              {options.slice(0, 3).map((opt, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <div className="h-4 w-24 animate-pulse rounded bg-muted/50" />
+                  <div className="h-2 flex-1 animate-pulse rounded-full bg-muted/50" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </Card>
+
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Enriching with web facts for better accuracy...
+        </p>
       </motion.div>
     );
   }

@@ -18,12 +18,14 @@ import {
   AlertTriangle,
   Key,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useConfetti } from '@/hooks/useConfetti';
 import { useCountUp } from '@/hooks/useCountUp';
+import { handleApiError } from '@/lib/apiErrors';
 
 // Separate component for animated score to prevent re-creation on every render
 function AnimatedScore({ score, maxScore, enabled }) {
@@ -183,7 +185,7 @@ export default function ExplanationView({
         setAgreesWithData(data.agreesWithData !== false);
         setHasUserContext(data.hasUserContext || false);
       } catch (error) {
-        console.error('Explanation error:', error);
+        handleApiError(error, 'explanation');
         setDataAnalysis(
           `${ranking[0].option} ranked highest based on your weighted criteria priorities.`
         );
@@ -192,6 +194,7 @@ export default function ExplanationView({
       }
     };
     fetchExplanations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -221,12 +224,13 @@ export default function ExplanationView({
           followUpDilemmas: data.followUpDilemmas || [],
         });
       } catch (error) {
-        console.error('Suggestions error:', error);
+        handleApiError(error, 'suggestions');
       } finally {
         setIsLoadingSuggestions(false);
       }
     };
     fetchSuggestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const contextSummary = useMemo(() => {

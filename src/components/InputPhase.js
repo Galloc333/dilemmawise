@@ -11,8 +11,10 @@ import {
   CheckCircle2,
   MessageCircle,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { handleApiError } from '@/lib/apiErrors';
 import { cn } from '@/lib/utils';
 
 // SCREENS
@@ -197,7 +199,7 @@ export default function InputPhase({
           setOptions((prev) => [...new Set([...prev, ...newOpts])]);
         }
       } catch (err) {
-        console.error('Chat API error:', err);
+        handleApiError(err, 'chat');
         const criteriaNote =
           extractedCriteria.length > 0
             ? ` I also noticed some factors you care about – we'll review those in the next step.`
@@ -216,7 +218,7 @@ export default function InputPhase({
         setIsTyping(false);
       }
     } catch (error) {
-      console.error('Analysis error:', error);
+      handleApiError(error, 'analyze-input');
       setCoreDilemma(dilemmaQuestion);
       setScreen(SCREENS.OPTIONS);
       setMessages([
@@ -272,7 +274,7 @@ export default function InputPhase({
         setCriteria((prev) => [...new Set([...prev, ...newCriteria])]);
       }
     } catch (error) {
-      console.error('Failed to get criteria suggestions:', error);
+      handleApiError(error, 'criteria-suggestions');
       setMessages([
         {
           role: 'assistant',
@@ -336,7 +338,7 @@ export default function InputPhase({
         setCriteria((prev) => [...new Set([...prev, ...newCriteria])]);
       }
     } catch (error) {
-      console.error('Chat error:', error);
+      handleApiError(error, 'chat');
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', text: 'Sorry, I had trouble connecting. Please try again.' },
