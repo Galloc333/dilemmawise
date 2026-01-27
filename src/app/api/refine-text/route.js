@@ -1,5 +1,5 @@
-import { generateWithRetry, parseJsonFromResponse } from "@/lib/gemini";
-import { NextResponse } from "next/server";
+import { generateWithRetry, parseJsonFromResponse } from '@/lib/gemini';
+import { NextResponse } from 'next/server';
 
 const REFINE_TEXT_PROMPT = `You are a text refinement assistant. Your task is to correct spelling and typing errors in user-provided text while preserving the original meaning and intent.
 
@@ -32,43 +32,40 @@ Examples:
 `;
 
 export async function POST(request) {
-    try {
-        const { type, text, items } = await request.json();
+  try {
+    const { type, text, items } = await request.json();
 
-        if (!type || (!text && !items)) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-        }
-
-        const inputData = items
-            ? { type, items }
-            : { type, text };
-
-        const prompt = `Refine this input:\n${JSON.stringify(inputData)}`;
-
-        const result = await generateWithRetry([
-            { text: REFINE_TEXT_PROMPT },
-            { text: prompt }
-        ]);
-
-        const responseText = result.response.text();
-        const parsed = parseJsonFromResponse(responseText);
-
-        if (parsed) {
-            return NextResponse.json(parsed);
-        }
-
-        // Fallback: return original if parsing fails
-        return NextResponse.json({
-            refined: text || items,
-            changes_made: false
-        });
-
-    } catch (error) {
-        console.error("Refine Text Error:", error);
-        // On error, return original text unchanged
-        return NextResponse.json({
-            refined: request.body?.text || request.body?.items,
-            changes_made: false
-        }, { status: 200 }); // Return 200 to not break the flow
+    if (!type || (!text && !items)) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
+
+    const inputData = items ? { type, items } : { type, text };
+
+    const prompt = `Refine this input:\n${JSON.stringify(inputData)}`;
+
+    const result = await generateWithRetry([{ text: REFINE_TEXT_PROMPT }, { text: prompt }]);
+
+    const responseText = result.response.text();
+    const parsed = parseJsonFromResponse(responseText);
+
+    if (parsed) {
+      return NextResponse.json(parsed);
+    }
+
+    // Fallback: return original if parsing fails
+    return NextResponse.json({
+      refined: text || items,
+      changes_made: false,
+    });
+  } catch (error) {
+    console.error('Refine Text Error:', error);
+    // On error, return original text unchanged
+    return NextResponse.json(
+      {
+        refined: request.body?.text || request.body?.items,
+        changes_made: false,
+      },
+      { status: 200 }
+    ); // Return 200 to not break the flow
+  }
 }

@@ -1,5 +1,5 @@
-import { generateWithRetry } from "@/lib/gemini";
-import { NextResponse } from "next/server";
+import { generateWithRetry } from '@/lib/gemini';
+import { NextResponse } from 'next/server';
 
 const ELICITATION_SYSTEM_PROMPT = `You are a decision-support assistant helping the user compare options across criteria through evidence-based elicitation.
 
@@ -75,99 +75,97 @@ When finishing, your last message should briefly summarize your understanding of
 Remember: Be warm, conversational, and specific. The JSON block is hidden from the user.`;
 
 export async function POST(request) {
-    try {
-        const { options, criteria, conversation, currentScores, currentEvidence } = await request.json();
+  try {
+    const { options, criteria, conversation, currentScores, currentEvidence } =
+      await request.json();
 
-        // Initialize structures if not provided
-        const scores = currentScores || {};
-        const confidence = {};
-        const evidence = currentEvidence || {};
+    // Initialize structures if not provided
+    const scores = currentScores || {};
+    const confidence = {};
+    const evidence = currentEvidence || {};
 
-        options.forEach(opt => {
-            if (!scores[opt]) {
-                scores[opt] = {};
-            }
-            confidence[opt] = {};
-            if (!evidence[opt]) {
-                evidence[opt] = {};
-            }
-            criteria.forEach(crit => {
-                if (scores[opt][crit] === undefined || scores[opt][crit] === null) {
-                    scores[opt][crit] = null; // Use null for unknown instead of 3
-                }
-                confidence[opt][crit] = "low";
-                if (!evidence[opt][crit]) {
-                    evidence[opt][crit] = "";
-                }
-            });
-        });
+    options.forEach((opt) => {
+      if (!scores[opt]) {
+        scores[opt] = {};
+      }
+      confidence[opt] = {};
+      if (!evidence[opt]) {
+        evidence[opt] = {};
+      }
+      criteria.forEach((crit) => {
+        if (scores[opt][crit] === undefined || scores[opt][crit] === null) {
+          scores[opt][crit] = null; // Use null for unknown instead of 3
+        }
+        confidence[opt][crit] = 'low';
+        if (!evidence[opt][crit]) {
+          evidence[opt][crit] = '';
+        }
+      });
+    });
 
-        // Build the context-aware prompt
-        const systemPrompt = ELICITATION_SYSTEM_PROMPT
-            .replace("{options}", options.join(", "))
-            .replace("{criteria}", criteria.join(", "))
-            .replace("{currentScores}", JSON.stringify(scores, null, 2))
-            .replace("{confidence}", JSON.stringify(confidence, null, 2))
-            .replace("{evidence}", JSON.stringify(evidence, null, 2));
+    // Build the context-aware prompt
+    const systemPrompt = ELICITATION_SYSTEM_PROMPT.replace('{options}', options.join(', '))
+      .replace('{criteria}', criteria.join(', '))
+      .replace('{currentScores}', JSON.stringify(scores, null, 2))
+      .replace('{confidence}', JSON.stringify(confidence, null, 2))
+      .replace('{evidence}', JSON.stringify(evidence, null, 2));
 
-        // Build conversation history
-        const conversationParts = [
-            systemPrompt,
-            ...conversation.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`)
-        ];
+    // Build conversation history
+    const conversationParts = [
+      systemPrompt,
+      ...conversation.map((msg) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`),
+    ];
 
-        const result = await generateWithRetry(conversationParts.join("\n\n"));
-        let responseText = result.response.text();
+    const result = await generateWithRetry(conversationParts.join('\n\n'));
+    let responseText = result.response.text();
 
-        // Parse the JSON response
-        let parsedResponse = {
-            next_question: "I'd love to understand more about your options. Could you tell me about each one?",
-            is_finished: false,
-            scores: scores,
-            confidence: confidence,
-            evidence: evidence,
-            reasoning: ""
+    // Parse the JSON response
+    let parsedResponse = {
+      next_question:
+        "I'd love to understand more about your options. Could you tell me about each one?",
+      is_finished: false,
+      scores: scores,
+      confidence: confidence,
+      evidence: evidence,
+      reasoning: '',
+    };
+
+    const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      try {
+        const data = JSON.parse(jsonMatch[1]);
+        parsedResponse = {
+          next_question: data.next_question || parsedResponse.next_question,
+          is_finished: data.is_finished || false,
+          scores: data.scores || scores,
+          confidence: data.confidence || confidence,
+          evidence: data.evidence || evidence,
+          reasoning: data.reasoning || '',
         };
 
-        const jsonMatch = responseText.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jsonMatch) {
-            try {
-                const data = JSON.parse(jsonMatch[1]);
-                parsedResponse = {
-                    next_question: data.next_question || parsedResponse.next_question,
-                    is_finished: data.is_finished || false,
-                    scores: data.scores || scores,
-                    confidence: data.confidence || confidence,
-                    evidence: data.evidence || evidence,
-                    reasoning: data.reasoning || ""
-                };
-
-                // Remove JSON block from visible response
-                responseText = responseText.replace(jsonMatch[0], '').trim();
-            } catch (e) {
-                console.error("Failed to parse elicitation JSON:", e);
-            }
-        }
-
-        // If the LLM didn't provide a next question, use the cleaned response itself
-        if (!parsedResponse.next_question && responseText) {
-            parsedResponse.next_question = responseText;
-        }
-
-        return NextResponse.json({
-            response: responseText || parsedResponse.next_question,
-            next_question: parsedResponse.next_question,
-            is_finished: parsedResponse.is_finished,
-            scores: parsedResponse.scores,
-            confidence: parsedResponse.confidence,
-            evidence: parsedResponse.evidence,
-            reasoning: parsedResponse.reasoning
-        });
-    } catch (error) {
-        console.error("Elicitation API Error:", error);
-        return NextResponse.json(
-            { error: "Failed to generate elicitation response" },
-            { status: 500 }
-        );
+        // Remove JSON block from visible response
+        responseText = responseText.replace(jsonMatch[0], '').trim();
+      } catch (e) {
+        console.error('Failed to parse elicitation JSON:', e);
+      }
     }
+
+    // If the LLM didn't provide a next question, use the cleaned response itself
+    if (!parsedResponse.next_question && responseText) {
+      parsedResponse.next_question = responseText;
+    }
+
+    return NextResponse.json({
+      response: responseText || parsedResponse.next_question,
+      next_question: parsedResponse.next_question,
+      is_finished: parsedResponse.is_finished,
+      scores: parsedResponse.scores,
+      confidence: parsedResponse.confidence,
+      evidence: parsedResponse.evidence,
+      reasoning: parsedResponse.reasoning,
+    });
+  } catch (error) {
+    console.error('Elicitation API Error:', error);
+    return NextResponse.json({ error: 'Failed to generate elicitation response' }, { status: 500 });
+  }
 }

@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+build/
+dist/
+
+# Cache
+.cache/
+
+# Logs
+*.log
+
+# Environment
+.env*
+
+# Lock files
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Generated
+*.min.js
+*.min.css
+
+# Other
+.git/
+.vercel/

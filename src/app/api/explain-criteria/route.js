@@ -1,5 +1,5 @@
-import { generateWithRetry, parseJsonFromResponse } from "@/lib/gemini";
-import { NextResponse } from "next/server";
+import { generateWithRetry, parseJsonFromResponse } from '@/lib/gemini';
+import { NextResponse } from 'next/server';
 
 const SYSTEM_PROMPT = `You are an AI assistant for a decision-making app.
 Your task is to provide short, helpful tooltips for decision criteria.
@@ -21,28 +21,24 @@ Output:
 Return ONLY the JSON object.
 `;
 
-
 export async function POST(request) {
-    try {
-        const { criteria } = await request.json();
+  try {
+    const { criteria } = await request.json();
 
-        if (!criteria || !Array.isArray(criteria) || criteria.length === 0) {
-            return NextResponse.json({});
-        }
-
-        const prompt = `Criteria to explain: ${JSON.stringify(criteria)}`;
-
-        const result = await generateWithRetry([
-            { text: SYSTEM_PROMPT },
-            { text: prompt }
-        ]);
-
-        const text = result.response.text();
-        const explanations = parseJsonFromResponse(text);
-
-        return NextResponse.json(explanations);
-    } catch (error) {
-        console.error("Explain Criteria Error:", error);
-        return NextResponse.json({}, { status: 500 });
+    if (!criteria || !Array.isArray(criteria) || criteria.length === 0) {
+      return NextResponse.json({});
     }
+
+    const prompt = `Criteria to explain: ${JSON.stringify(criteria)}`;
+
+    const result = await generateWithRetry([{ text: SYSTEM_PROMPT }, { text: prompt }]);
+
+    const text = result.response.text();
+    const explanations = parseJsonFromResponse(text);
+
+    return NextResponse.json(explanations);
+  } catch (error) {
+    console.error('Explain Criteria Error:', error);
+    return NextResponse.json({}, { status: 500 });
+  }
 }

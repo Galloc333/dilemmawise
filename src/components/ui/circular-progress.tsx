@@ -1,5 +1,5 @@
-import { motion } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 interface CircularProgressProps {
   value: number; // 0-10
@@ -27,28 +27,24 @@ export function CircularProgress({
 
   // Color based on value
   const getColor = () => {
-    if (value <= 2) return "stroke-muted-foreground/30";
-    if (value <= 4) return "stroke-muted-foreground/50";
-    if (value <= 6) return "stroke-foreground/70";
-    if (value <= 8) return "stroke-primary";
-    return "stroke-primary";
+    if (value <= 2) return 'stroke-muted-foreground/30';
+    if (value <= 4) return 'stroke-muted-foreground/50';
+    if (value <= 6) return 'stroke-foreground/70';
+    if (value <= 8) return 'stroke-primary';
+    return 'stroke-primary';
   };
 
   const getTextColor = () => {
-    if (value <= 2) return "text-muted-foreground";
-    if (value <= 4) return "text-muted-foreground";
-    if (value <= 6) return "text-foreground";
-    if (value <= 8) return "text-primary";
-    return "text-primary font-bold";
+    if (value <= 2) return 'text-muted-foreground';
+    if (value <= 4) return 'text-muted-foreground';
+    if (value <= 6) return 'text-foreground';
+    if (value <= 8) return 'text-primary';
+    return 'text-primary font-bold';
   };
 
   return (
-    <div className={cn("relative inline-flex items-center justify-center", className)}>
-      <svg
-        width={size}
-        height={size}
-        className="transform -rotate-90"
-      >
+    <div className={cn('relative inline-flex items-center justify-center', className)}>
+      <svg width={size} height={size} className="-rotate-90 transform">
         {/* Background circle */}
         <circle
           cx={size / 2}
@@ -59,7 +55,7 @@ export function CircularProgress({
           fill="none"
           className="stroke-muted/20"
         />
-        
+
         {/* Progress circle */}
         {animated ? (
           <motion.circle
@@ -69,10 +65,10 @@ export function CircularProgress({
             strokeWidth={strokeWidth}
             fill="none"
             strokeLinecap="round"
-            className={cn("transition-colors duration-300", getColor())}
+            className={cn('transition-colors duration-300', getColor())}
             initial={{ strokeDashoffset: circumference }}
             animate={{ strokeDashoffset: offset }}
-            transition={{ duration: 1, ease: "easeOut" }}
+            transition={{ duration: 1, ease: 'easeOut' }}
             style={{
               strokeDasharray: circumference,
             }}
@@ -85,7 +81,7 @@ export function CircularProgress({
             strokeWidth={strokeWidth}
             fill="none"
             strokeLinecap="round"
-            className={cn("transition-colors duration-300", getColor())}
+            className={cn('transition-colors duration-300', getColor())}
             style={{
               strokeDasharray: circumference,
               strokeDashoffset: offset,
@@ -93,11 +89,11 @@ export function CircularProgress({
           />
         )}
       </svg>
-      
+
       {showValue && (
         <span
           className={cn(
-            "absolute text-sm font-bold transition-colors duration-300",
+            'absolute text-sm font-bold transition-colors duration-300',
             getTextColor()
           )}
         >

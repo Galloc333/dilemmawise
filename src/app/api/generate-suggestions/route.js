@@ -1,5 +1,5 @@
-import { generateWithRetry, parseJsonFromResponse } from "@/lib/gemini";
-import { NextResponse } from "next/server";
+import { generateWithRetry, parseJsonFromResponse } from '@/lib/gemini';
+import { NextResponse } from 'next/server';
 
 const SUGGESTIONS_PROMPT = `You are a decision analysis expert. Based on the user's completed decision analysis, generate helpful suggestions for three categories:
 
@@ -71,67 +71,68 @@ Suggest logical follow-up decisions that come after choosing the winner.
 `;
 
 export async function POST(request) {
+  try {
+    const { dilemma, options, criteria, winner, weights, userContext } = await request.json();
+
+    // Format user context for prompt
+    const contextStr =
+      userContext && Object.keys(userContext).length > 0
+        ? Object.entries(userContext)
+            .filter(([_, v]) => v && v !== 'null')
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+            .join(', ')
+        : 'None provided';
+
+    const prompt = SUGGESTIONS_PROMPT.replaceAll('{dilemma}', dilemma || 'Decision analysis')
+      .replaceAll('{options}', options?.join(', ') || 'N/A')
+      .replaceAll('{criteria}', criteria?.join(', ') || 'N/A')
+      .replaceAll('{winner}', winner || 'N/A')
+      .replaceAll('{userContext}', contextStr);
+
+    const result = await generateWithRetry(prompt);
+
+    // Safely extract text from response
+    let text = '';
     try {
-        const { dilemma, options, criteria, winner, weights, userContext } = await request.json();
-
-        // Format user context for prompt
-        const contextStr = userContext && Object.keys(userContext).length > 0
-            ? Object.entries(userContext)
-                .filter(([_, v]) => v && v !== 'null')
-                .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
-                .join(', ')
-            : 'None provided';
-
-        const prompt = SUGGESTIONS_PROMPT
-            .replaceAll('{dilemma}', dilemma || 'Decision analysis')
-            .replaceAll('{options}', options?.join(', ') || 'N/A')
-            .replaceAll('{criteria}', criteria?.join(', ') || 'N/A')
-            .replaceAll('{winner}', winner || 'N/A')
-            .replaceAll('{userContext}', contextStr);
-
-        const result = await generateWithRetry(prompt);
-        
-        // Safely extract text from response
-        let text = '';
-        try {
-            text = result.response.text();
-        } catch (textError) {
-            console.error('[generate-suggestions] Failed to extract text from response:', textError);
-            throw new Error('Failed to extract text from LLM response');
-        }
-
-        // Parse JSON with robust error handling
-        let parsed = {};
-        try {
-            parsed = parseJsonFromResponse(text);
-        } catch (parseError) {
-            console.error('[generate-suggestions] JSON parse failed:', parseError);
-            console.error('[generate-suggestions] Raw response text:', text.substring(0, 500));
-            // Continue with empty parsed object - will use fallback arrays below
-        }
-
-        // Validate structure and ensure arrays
-        const otherOptions = Array.isArray(parsed.otherOptions) ? parsed.otherOptions : [];
-        const missingCriteria = Array.isArray(parsed.missingCriteria) ? parsed.missingCriteria : [];
-        const followUpDilemmas = Array.isArray(parsed.followUpDilemmas) ? parsed.followUpDilemmas : [];
-
-        console.log(`[generate-suggestions] Generated: ${otherOptions.length} options, ${missingCriteria.length} criteria, ${followUpDilemmas.length} dilemmas`);
-
-        // Return validated arrays
-        return NextResponse.json({
-            otherOptions,
-            missingCriteria,
-            followUpDilemmas
-        });
-
-    } catch (error) {
-        console.error('[generate-suggestions] Fatal error:', error);
-        
-        // Return empty arrays as fallback
-        return NextResponse.json({
-            otherOptions: [],
-            missingCriteria: [],
-            followUpDilemmas: []
-        });
+      text = result.response.text();
+    } catch (textError) {
+      console.error('[generate-suggestions] Failed to extract text from response:', textError);
+      throw new Error('Failed to extract text from LLM response');
     }
+
+    // Parse JSON with robust error handling
+    let parsed = {};
+    try {
+      parsed = parseJsonFromResponse(text);
+    } catch (parseError) {
+      console.error('[generate-suggestions] JSON parse failed:', parseError);
+      console.error('[generate-suggestions] Raw response text:', text.substring(0, 500));
+      // Continue with empty parsed object - will use fallback arrays below
+    }
+
+    // Validate structure and ensure arrays
+    const otherOptions = Array.isArray(parsed.otherOptions) ? parsed.otherOptions : [];
+    const missingCriteria = Array.isArray(parsed.missingCriteria) ? parsed.missingCriteria : [];
+    const followUpDilemmas = Array.isArray(parsed.followUpDilemmas) ? parsed.followUpDilemmas : [];
+
+    console.log(
+      `[generate-suggestions] Generated: ${otherOptions.length} options, ${missingCriteria.length} criteria, ${followUpDilemmas.length} dilemmas`
+    );
+
+    // Return validated arrays
+    return NextResponse.json({
+      otherOptions,
+      missingCriteria,
+      followUpDilemmas,
+    });
+  } catch (error) {
+    console.error('[generate-suggestions] Fatal error:', error);
+
+    // Return empty arrays as fallback
+    return NextResponse.json({
+      otherOptions: [],
+      missingCriteria: [],
+      followUpDilemmas: [],
+    });
+  }
 }

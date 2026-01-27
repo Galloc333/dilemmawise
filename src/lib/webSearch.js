@@ -1,38 +1,38 @@
-import { generateWithRetry, parseJsonFromResponse } from "@/lib/gemini";
+import { generateWithRetry, parseJsonFromResponse } from '@/lib/gemini';
 
 /**
  * Performs a web search (or simulation) for valid queries.
  * Priority: Google Custom Search -> Gemini Knowledge Base Fallback
  */
 export async function performWebSearch(query) {
-    if (!query) return [];
+  if (!query) return [];
 
-    // 1. Try Real Google Custom Search if keys exist
-    const hasSearchAPI = process.env.GOOGLE_SEARCH_API_KEY && process.env.SEARCH_ENGINE_ID;
+  // 1. Try Real Google Custom Search if keys exist
+  const hasSearchAPI = process.env.GOOGLE_SEARCH_API_KEY && process.env.SEARCH_ENGINE_ID;
 
-    if (hasSearchAPI) {
-        try {
-            console.log(`Performing Google Search for: ${query}`);
-            const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${process.env.GOOGLE_SEARCH_API_KEY}&cx=${process.env.SEARCH_ENGINE_ID}&q=${encodeURIComponent(query)}&num=3`;
+  if (hasSearchAPI) {
+    try {
+      console.log(`Performing Google Search for: ${query}`);
+      const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${process.env.GOOGLE_SEARCH_API_KEY}&cx=${process.env.SEARCH_ENGINE_ID}&q=${encodeURIComponent(query)}&num=3`;
 
-            const response = await fetch(searchUrl);
-            const data = await response.json();
+      const response = await fetch(searchUrl);
+      const data = await response.json();
 
-            if (data.items) {
-                return data.items.map(item => ({
-                    title: item.title,
-                    url: item.link,
-                    snippet: item.snippet
-                }));
-            }
-        } catch (searchError) {
-            console.error("Google Search API failed, falling back to Gemini:", searchError.message);
-        }
+      if (data.items) {
+        return data.items.map((item) => ({
+          title: item.title,
+          url: item.link,
+          snippet: item.snippet,
+        }));
+      }
+    } catch (searchError) {
+      console.error('Google Search API failed, falling back to Gemini:', searchError.message);
     }
+  }
 
-    // 2. Fallback: Gemini Knowledge Base Simulation
-    console.log(`Using Gemini fallback for query: ${query}`);
-    const SEARCH_SIMULATION_PROMPT = `You are a factual search engine. 
+  // 2. Fallback: Gemini Knowledge Base Simulation
+  console.log(`Using Gemini fallback for query: ${query}`);
+  const SEARCH_SIMULATION_PROMPT = `You are a factual search engine. 
 User Query: "${query}"
 
 Your goal: Provide 3 distinct, highly relevant "search results" that directly address the specific comparison or entity in the query.
@@ -51,28 +51,28 @@ Output JSON Format:
   }
 ]`;
 
+  try {
+    const result = await generateWithRetry(SEARCH_SIMULATION_PROMPT);
+    const text = result.response.text();
+
+    let parsed;
     try {
-        const result = await generateWithRetry(SEARCH_SIMULATION_PROMPT);
-        const text = result.response.text();
-        
-        let parsed;
-        try {
-            parsed = parseJsonFromResponse(text);
-        } catch (parseError) {
-            console.warn("[WebSearch] JSON parse failed, returning empty results:", parseError.message);
-            return [];
-        }
-        
-        // Ensure we return an array
-        if (Array.isArray(parsed)) {
-            return parsed;
-        } else if (parsed && typeof parsed === 'object') {
-            // Sometimes LLM wraps array in an object like { results: [...] }
-            return parsed.results || parsed.items || [];
-        }
-        return [];
-    } catch (geminiError) {
-        console.error("Gemini Search Simulation Error:", geminiError);
-        return [];
+      parsed = parseJsonFromResponse(text);
+    } catch (parseError) {
+      console.warn('[WebSearch] JSON parse failed, returning empty results:', parseError.message);
+      return [];
     }
+
+    // Ensure we return an array
+    if (Array.isArray(parsed)) {
+      return parsed;
+    } else if (parsed && typeof parsed === 'object') {
+      // Sometimes LLM wraps array in an object like { results: [...] }
+      return parsed.results || parsed.items || [];
+    }
+    return [];
+  } catch (geminiError) {
+    console.error('Gemini Search Simulation Error:', geminiError);
+    return [];
+  }
 }

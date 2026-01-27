@@ -1,5 +1,5 @@
-import { generateWithRetry, parseJsonFromResponse } from "@/lib/gemini";
-import { NextResponse } from "next/server";
+import { generateWithRetry, parseJsonFromResponse } from '@/lib/gemini';
+import { NextResponse } from 'next/server';
 
 const EXTRACTION_PROMPT = `You are an AI assistant helping users structure complex decisions.
 
@@ -40,62 +40,60 @@ User's dilemma description:
 `;
 
 export async function POST(request) {
-    try {
-        const { description } = await request.json();
+  try {
+    const { description } = await request.json();
 
-        if (!description || description.trim().length < 10) {
-            return NextResponse.json({
-                options: [],
-                criteria: [],
-                userContext: {},
-                summarizedDilemma: "",
-                isVague: true,
-                isOverlyDetailed: false
-            });
-        }
-
-        const prompt = EXTRACTION_PROMPT + description;
-        const result = await generateWithRetry(prompt);
-        const responseText = result.response.text();
-
-        try {
-            const parsed = parseJsonFromResponse(responseText);
-
-            // Clean up and validate user context
-            const userContext = parsed.userContext || {};
-
-            // Remove null values from userContext
-            Object.keys(userContext).forEach(key => {
-                if (userContext[key] === null || userContext[key] === "null" || userContext[key] === "") {
-                    delete userContext[key];
-                }
-            });
-
-            // Validate the response structure
-            return NextResponse.json({
-                options: Array.isArray(parsed.options) ? parsed.options : [],
-                criteria: Array.isArray(parsed.criteria) ? parsed.criteria : [],
-                userContext: userContext,
-                summarizedDilemma: parsed.summarizedDilemma || "",
-                isVague: parsed.isVague === true || (parsed.options?.length < 2 && !parsed.summarizedDilemma),
-                isOverlyDetailed: parsed.isOverlyDetailed === true
-            });
-        } catch (parseError) {
-            console.error("Failed to parse LLM response:", parseError);
-            return NextResponse.json({
-                options: [],
-                criteria: [],
-                userContext: {},
-                summarizedDilemma: "",
-                isVague: true,
-                isOverlyDetailed: false
-            });
-        }
-    } catch (error) {
-        console.error("API Error:", error);
-        return NextResponse.json(
-            { error: "Failed to analyze input" },
-            { status: 500 }
-        );
+    if (!description || description.trim().length < 10) {
+      return NextResponse.json({
+        options: [],
+        criteria: [],
+        userContext: {},
+        summarizedDilemma: '',
+        isVague: true,
+        isOverlyDetailed: false,
+      });
     }
+
+    const prompt = EXTRACTION_PROMPT + description;
+    const result = await generateWithRetry(prompt);
+    const responseText = result.response.text();
+
+    try {
+      const parsed = parseJsonFromResponse(responseText);
+
+      // Clean up and validate user context
+      const userContext = parsed.userContext || {};
+
+      // Remove null values from userContext
+      Object.keys(userContext).forEach((key) => {
+        if (userContext[key] === null || userContext[key] === 'null' || userContext[key] === '') {
+          delete userContext[key];
+        }
+      });
+
+      // Validate the response structure
+      return NextResponse.json({
+        options: Array.isArray(parsed.options) ? parsed.options : [],
+        criteria: Array.isArray(parsed.criteria) ? parsed.criteria : [],
+        userContext: userContext,
+        summarizedDilemma: parsed.summarizedDilemma || '',
+        isVague:
+          parsed.isVague === true || (parsed.options?.length < 2 && !parsed.summarizedDilemma),
+        isOverlyDetailed: parsed.isOverlyDetailed === true,
+      });
+    } catch (parseError) {
+      console.error('Failed to parse LLM response:', parseError);
+      return NextResponse.json({
+        options: [],
+        criteria: [],
+        userContext: {},
+        summarizedDilemma: '',
+        isVague: true,
+        isOverlyDetailed: false,
+      });
+    }
+  } catch (error) {
+    console.error('API Error:', error);
+    return NextResponse.json({ error: 'Failed to analyze input' }, { status: 500 });
+  }
 }

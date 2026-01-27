@@ -1,5 +1,5 @@
-import { generateWithRetry, parseJsonFromResponse } from "@/lib/gemini";
-import { NextResponse } from "next/server";
+import { generateWithRetry, parseJsonFromResponse } from '@/lib/gemini';
+import { NextResponse } from 'next/server';
 
 const SYSTEM_PROMPT = `You are a Logic Validator for decision matrices.
 Your goal is to ensure that the user's Options and Criteria form a coherent matrix where EVERY Option can be reasonably rated against EVERY Criterion.
@@ -25,27 +25,24 @@ Output JSON:
 `;
 
 export async function POST(request) {
-    try {
-        const { options, criteria } = await request.json();
+  try {
+    const { options, criteria } = await request.json();
 
-        if (!options?.length || !criteria?.length) {
-            return NextResponse.json({ isValid: true });
-        }
-
-        const prompt = `Options: ${JSON.stringify(options)}\nCriteria: ${JSON.stringify(criteria)}`;
-
-        const result = await generateWithRetry([
-            { text: SYSTEM_PROMPT },
-            { text: prompt }
-        ]);
-
-        const text = result.response.text();
-        const analysis = parseJsonFromResponse(text);
-
-        return NextResponse.json(analysis);
-    } catch (error) {
-        console.error("Validation Error:", error);
-        // Default to valid if error, so we don't block user
-        return NextResponse.json({ isValid: true });
+    if (!options?.length || !criteria?.length) {
+      return NextResponse.json({ isValid: true });
     }
+
+    const prompt = `Options: ${JSON.stringify(options)}\nCriteria: ${JSON.stringify(criteria)}`;
+
+    const result = await generateWithRetry([{ text: SYSTEM_PROMPT }, { text: prompt }]);
+
+    const text = result.response.text();
+    const analysis = parseJsonFromResponse(text);
+
+    return NextResponse.json(analysis);
+  } catch (error) {
+    console.error('Validation Error:', error);
+    // Default to valid if error, so we don't block user
+    return NextResponse.json({ isValid: true });
+  }
 }

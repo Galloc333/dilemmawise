@@ -1,25 +1,21 @@
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { ThemeProvider } from "@/components/ThemeProvider";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "sonner";
+import { Inter } from 'next/font/google';
+import './globals.css';
+import { ThemeProvider } from '@/components/ThemeProvider';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from 'sonner';
 
 const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
 });
 
 export const metadata = {
-  title: "DilemmaWise",
-  description: "AI-powered decision support for complex choices",
+  title: 'DilemmaWise',
+  description: 'AI-powered decision support for complex choices',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.variable}>
@@ -29,14 +25,8 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <TooltipProvider>
-            {children}
-          </TooltipProvider>
-          <Toaster 
-            position="top-center"
-            richColors
-            closeButton
-          />
+          <TooltipProvider>{children}</TooltipProvider>
+          <Toaster position="top-center" richColors closeButton />
         </ThemeProvider>
       </body>
     </html>
