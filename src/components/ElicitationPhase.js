@@ -368,7 +368,9 @@ export default function ElicitationPhase({
       >
         <div className="mb-8 text-center">
           <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-primary/30 border-t-primary" />
-          <h2 className="mb-2 text-xl font-semibold text-foreground">Preparing your questions...</h2>
+          <h2 className="mb-2 text-xl font-semibold text-foreground">
+            Preparing your questions...
+          </h2>
           <p className="text-muted-foreground">Analyzing your criteria and options</p>
         </div>
 
