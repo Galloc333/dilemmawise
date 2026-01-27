@@ -81,23 +81,42 @@ export function LandingPage({ onStartDecision }: LandingPageProps) {
           </motion.p>
 
           <motion.div variants={itemVariants} className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              size="lg"
-              onClick={onStartDecision}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-lg font-medium shadow-warm-lg hover:shadow-warm-xl transition-all duration-300 group"
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >
-              Start a decision
-              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="lg"
-              onClick={scrollToHowItWorks}
-              className="text-muted-foreground hover:text-foreground px-8 py-6 text-lg"
+              <Button
+                size="lg"
+                onClick={onStartDecision}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-lg font-medium shadow-warm-lg hover:shadow-warm-xl transition-all duration-300 group relative overflow-hidden"
+              >
+                <span className="relative z-10 flex items-center">
+                  Start a decision
+                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                </span>
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                  initial={{ x: "-100%" }}
+                  whileHover={{ x: "100%" }}
+                  transition={{ duration: 0.6 }}
+                />
+              </Button>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >
-              See how it works
-              <ChevronDown className="ml-2 h-5 w-5 animate-bounce" />
-            </Button>
+              <Button
+                variant="ghost"
+                size="lg"
+                onClick={scrollToHowItWorks}
+                className="text-muted-foreground hover:text-foreground px-8 py-6 text-lg"
+              >
+                See how it works
+                <ChevronDown className="ml-2 h-5 w-5 animate-bounce" />
+              </Button>
+            </motion.div>
           </motion.div>
         </motion.div>
       </section>
@@ -120,11 +139,20 @@ export function LandingPage({ onStartDecision }: LandingPageProps) {
 
           <div className="grid md:grid-cols-3 gap-8">
             {features.map((feature, index) => (
-              <motion.div key={index} variants={itemVariants}>
-                <Card className="p-8 h-full border-border/50 bg-card/50 backdrop-blur-sm hover:shadow-warm-lg transition-all duration-300 hover:-translate-y-1">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-6">
+              <motion.div 
+                key={index} 
+                variants={itemVariants}
+                whileHover={{ y: -8, scale: 1.02 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Card className="p-8 h-full border-border/50 bg-card/50 backdrop-blur-sm shadow-md hover:shadow-warm-lg transition-shadow duration-300">
+                  <motion.div 
+                    className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-6"
+                    whileHover={{ rotate: [0, -10, 10, -10, 0], scale: 1.1 }}
+                    transition={{ duration: 0.5 }}
+                  >
                     <feature.icon className="h-6 w-6 text-primary" />
-                  </div>
+                  </motion.div>
                   <h3 className="text-lg font-semibold text-foreground mb-3">{feature.title}</h3>
                   <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
                 </Card>

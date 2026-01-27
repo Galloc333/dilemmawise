@@ -7,6 +7,17 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useConfetti } from '@/hooks/useConfetti';
+import { useCountUp } from '@/hooks/useCountUp';
+
+// Separate component for animated score to prevent re-creation on every render
+function AnimatedScore({ score, maxScore, enabled }) {
+    const animatedScore = useCountUp(score, { 
+        duration: 1500, 
+        decimals: 1,
+        enabled
+    });
+    return <>{animatedScore} / {maxScore}</>;
+}
 
 export default function ExplanationView({ results, userContext = {}, dilemma, options: optionsProp, criteria: criteriaProp, onReset, onBackToRating, onEditOptions }) {
     const { scores, weights, ranking } = results;
@@ -22,6 +33,10 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
     const [currentPage, setCurrentPage] = useState(1);
     const totalPages = 4;
     const [hasShownConfetti, setHasShownConfetti] = useState(false);
+    
+    // Refs to prevent duplicate API calls (React Strict Mode)
+    const hasCalledExplanation = useRef(false);
+    const hasCalledSuggestions = useRef(false);
 
     const [dataAnalysis, setDataAnalysis] = useState('');
     const [whatCouldChange, setWhatCouldChange] = useState('');
@@ -108,6 +123,10 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
     }, [hasShownConfetti, currentPage]);
 
     useEffect(() => {
+        // Prevent duplicate calls in React Strict Mode
+        if (hasCalledExplanation.current) return;
+        hasCalledExplanation.current = true;
+        
         const fetchExplanations = async () => {
             try {
                 const response = await fetch('/api/explain', {
@@ -143,6 +162,10 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
     }, []);
 
     useEffect(() => {
+        // Prevent duplicate calls in React Strict Mode
+        if (hasCalledSuggestions.current) return;
+        hasCalledSuggestions.current = true;
+        
         const fetchSuggestions = async () => {
             try {
                 const response = await fetch('/api/generate-suggestions', {
@@ -235,21 +258,33 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
                         </div>
                         
                         {/* Winner Name with Trophy Badge */}
-                        <div className="flex items-center justify-center gap-4 mb-3">
-                            {/* Trophy Badge */}
-                            <div className="relative shrink-0">
-                                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 shadow-lg shadow-amber-500/30 flex items-center justify-center ring-2 ring-amber-300/40">
+                        <div className="flex items-center justify-center gap-5 mb-3">
+                            {/* Trophy Badge with Spring Animation */}
+                            <motion.div 
+                                className="relative shrink-0"
+                                initial={{ scale: 0, rotate: -180 }}
+                                animate={{ scale: 1, rotate: 0 }}
+                                transition={{ 
+                                    type: "spring",
+                                    stiffness: 260,
+                                    damping: 20,
+                                    delay: 0.2
+                                }}
+                            >
+                                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 shadow-lg shadow-amber-500/30 flex items-center justify-center ring-2 ring-amber-300/40 animate-glow-pulse">
                                     <Trophy className="h-7 w-7 text-amber-950" />
                                 </div>
-                                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-[9px] font-bold text-white uppercase tracking-wide shadow-sm whitespace-nowrap">
-                                    #1
-                                </div>
-                            </div>
+                            </motion.div>
                             
-                            {/* Winner Name */}
-                            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-clip-text text-transparent">
+                            {/* Winner Name with Slide In */}
+                            <motion.h1 
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: 0.4, duration: 0.6 }}
+                                className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-amber-600 via-orange-500 to-amber-600 bg-clip-text text-transparent"
+                            >
                                 {calculations.winner.option}
-                            </h1>
+                            </motion.h1>
                         </div>
                         
                         <p className="text-muted-foreground">
@@ -298,19 +333,34 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
                                         key={item.option}
                                         initial={{ opacity: 0, x: -20 }}
                                         animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: idx * 0.1 }}
+                                        transition={{ 
+                                            delay: idx * 0.15,
+                                            type: "spring",
+                                            stiffness: 100,
+                                            damping: 15
+                                        }}
                                         className={cn(
-                                            "flex items-center gap-4 p-4 rounded-xl border transition-all",
+                                            "flex items-center gap-4 p-4 rounded-xl border transition-all hover:shadow-md",
                                             idx === 0
                                                 ? "bg-gradient-to-r from-amber-50/80 to-orange-50/50 border-amber-200/60 dark:from-amber-950/20 dark:to-orange-950/10 dark:border-amber-800/30"
                                                 : "bg-secondary/30 border-border/50"
                                         )}
                                     >
-                                        {/* Custom Medal Badge */}
-                                        <div className={cn(
-                                            "w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg shrink-0",
-                                            badge.bg, badge.shadow, badge.text, badge.ring
-                                        )}>
+                                        {/* Custom Medal Badge with Scale Animation */}
+                                        <motion.div 
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{ 
+                                                delay: idx * 0.15 + 0.2,
+                                                type: "spring",
+                                                stiffness: 300,
+                                                damping: 20
+                                            }}
+                                            className={cn(
+                                                "w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg shrink-0",
+                                                badge.bg, badge.shadow, badge.text, badge.ring
+                                            )}
+                                        >
                                             {idx < 3 ? (
                                                 <span className="flex flex-col items-center leading-none">
                                                     <Trophy className="h-5 w-5 mb-0.5" />
@@ -319,29 +369,56 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
                                             ) : (
                                                 <span className="text-base font-bold">{idx + 1}</span>
                                             )}
-                                        </div>
+                                        </motion.div>
                                         <div className="flex-1">
-                                            <div className={cn(
-                                                "font-semibold",
-                                                idx === 0 ? "text-xl text-amber-900 dark:text-amber-100" : "text-lg"
-                                            )}>
-                                                {item.option}
-                                            </div>
-                                            <div className="text-sm text-muted-foreground">
-                                                Score: {item.score.toFixed(1)} / {maxPossibleScore}
-                                            </div>
-                                        </div>
-                                        <div className="w-28">
-                                            <Progress 
-                                                value={(item.score / maxPossibleScore) * 100} 
+                                            <motion.div 
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                transition={{ delay: idx * 0.15 + 0.3 }}
                                                 className={cn(
-                                                    "h-2.5 rounded-full",
-                                                    idx === 0 
-                                                        ? "[&>div]:bg-gradient-to-r [&>div]:from-amber-500 [&>div]:to-orange-500" 
-                                                        : "[&>div]:bg-muted-foreground/30"
+                                                    "font-semibold",
+                                                    idx === 0 ? "text-xl text-amber-900 dark:text-amber-100" : "text-lg"
                                                 )}
-                                            />
+                                            >
+                                                {item.option}
+                                            </motion.div>
+                                            <motion.div 
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                transition={{ delay: idx * 0.15 + 0.4 }}
+                                                className="text-sm text-muted-foreground"
+                                            >
+                                                Score: <AnimatedScore 
+                                                    score={item.score} 
+                                                    maxScore={maxPossibleScore}
+                                                    enabled={currentPage === 1}
+                                                />
+                                            </motion.div>
                                         </div>
+                                        <motion.div 
+                                            className="w-32 sm:w-40 md:w-48"
+                                            initial={{ opacity: 0, scale: 0.8 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ delay: idx * 0.15 + 0.5 }}
+                                        >
+                                            <div className="h-3 rounded-full bg-secondary overflow-hidden">
+                                                <motion.div
+                                                    initial={{ width: 0 }}
+                                                    animate={{ width: `${(item.score / maxPossibleScore) * 100}%` }}
+                                                    transition={{ 
+                                                        delay: idx * 0.15 + 0.6, 
+                                                        duration: 0.8, 
+                                                        ease: "easeOut" 
+                                                    }}
+                                                    className={cn(
+                                                        "h-full rounded-full",
+                                                        idx === 0 
+                                                            ? "bg-gradient-to-r from-amber-500 to-orange-500" 
+                                                            : "bg-gradient-to-r from-primary/40 to-primary/60"
+                                                    )}
+                                                />
+                                            </div>
+                                        </motion.div>
                                     </motion.div>
                                 );
                             })}
