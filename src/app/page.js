@@ -9,15 +9,31 @@ import { LandingPage } from '@/components/LandingPage';
 import { AppShell } from '@/components/AppShell';
 
 const pageVariants = {
-    initial: { opacity: 0, y: 10 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -10 },
-};
-
-const pageTransition = {
-    type: 'tween',
-    ease: 'easeInOut',
-    duration: 0.3,
+    initial: { 
+        opacity: 0, 
+        y: 20,
+        scale: 0.98
+    },
+    animate: { 
+        opacity: 1, 
+        y: 0,
+        scale: 1,
+        transition: {
+            type: 'spring',
+            stiffness: 300,
+            damping: 30,
+            mass: 0.8
+        }
+    },
+    exit: { 
+        opacity: 0, 
+        y: -20,
+        scale: 0.98,
+        transition: {
+            duration: 0.2,
+            ease: 'easeIn'
+        }
+    },
 };
 
 export default function Home() {
@@ -132,7 +148,6 @@ export default function Home() {
                     initial="initial"
                     animate="animate"
                     exit="exit"
-                    transition={pageTransition}
                     className="w-full"
                 >
                     {/* Phase Content */}

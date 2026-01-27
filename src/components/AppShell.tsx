@@ -5,6 +5,7 @@ import { RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PhaseStepper } from './PhaseStepper'
 import { ThemeToggle } from './ThemeToggle'
+import { motion } from 'framer-motion'
 
 type Phase = 'input' | 'criteria' | 'rating' | 'explanation' | 'editOptions'
 
@@ -21,11 +22,17 @@ export function AppShell({ children, currentPhase, onStartOver, className }: App
       {/* Premium slim header */}
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/80 backdrop-blur-md">
         <div className="container flex h-14 items-center justify-between">
-          {/* Logo - elegant wordmark */}
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
+          {/* Logo - elegant wordmark (clickable to return home) */}
+          <motion.button
+            onClick={onStartOver}
+            className="flex items-center gap-2.5 group cursor-pointer"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
               <svg 
-                className="h-4.5 w-4.5 text-primary" 
+                className="h-4.5 w-4.5 text-primary group-hover:scale-110 transition-transform" 
                 viewBox="0 0 24 24" 
                 fill="none" 
                 stroke="currentColor" 
@@ -37,10 +44,10 @@ export function AppShell({ children, currentPhase, onStartOver, className }: App
                 <path d="M12 3L2 12h3v9h6v-6h2v6h6v-9h3L12 3z" />
               </svg>
             </div>
-            <span className="text-lg font-semibold text-foreground tracking-tight">
+            <span className="text-lg font-semibold text-foreground tracking-tight group-hover:text-primary transition-colors">
               DilemmaWise
             </span>
-          </div>
+          </motion.button>
 
           {/* Phase Stepper - centered on desktop */}
           <div className="hidden md:flex flex-1 justify-center">

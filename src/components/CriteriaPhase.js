@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { CircularProgress } from '@/components/ui/circular-progress';
 import { cn } from '@/lib/utils';
 
 export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }) {
@@ -95,13 +96,22 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
                                     </span>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <button className="text-muted-foreground hover:text-foreground transition-colors">
+                                            <motion.button 
+                                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                                whileHover={{ scale: 1.1, rotate: 15 }}
+                                                whileTap={{ scale: 0.95 }}
+                                                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                                            >
                                                 <HelpCircle className="h-4 w-4" />
-                                            </button>
+                                            </motion.button>
                                         </TooltipTrigger>
                                         <TooltipContent side="right" className="max-w-xs">
                                             {loadingExplanations ? (
-                                                <span className="text-muted-foreground">Loading...</span>
+                                                <div className="space-y-2">
+                                                    <div className="h-3 w-32 bg-muted/50 rounded animate-pulse" />
+                                                    <div className="h-3 w-full bg-muted/50 rounded animate-pulse" />
+                                                    <div className="h-3 w-24 bg-muted/50 rounded animate-pulse" />
+                                                </div>
                                             ) : explanations[criterion] ? (
                                                 <>
                                                     <p className="font-medium text-primary mb-1">
@@ -122,9 +132,12 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
                                     )}>
                                         {getImportanceLabel(weights[criterion])}
                                     </span>
-                                    <span className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                                        {weights[criterion]}
-                                    </span>
+                                    <CircularProgress 
+                                        value={weights[criterion]} 
+                                        size={40}
+                                        strokeWidth={3}
+                                        animated={hoveredCriterion === criterion}
+                                    />
                                 </div>
                             </div>
 
@@ -176,7 +189,12 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
             {/* Summary */}
             <Card className="p-4 mb-6 bg-secondary/30">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Info className="h-4 w-4" />
+                    <motion.div
+                        animate={{ rotate: [0, -10, 10, -10, 0] }}
+                        transition={{ duration: 2, repeat: Infinity, repeatDelay: 5 }}
+                    >
+                        <Info className="h-4 w-4" />
+                    </motion.div>
                     <span>
                         Your top priorities: {' '}
                         <span className="font-medium text-foreground">
@@ -192,14 +210,18 @@ export default function CriteriaPhase({ criteria, onNext, onBack, savedWeights }
 
             {/* Navigation */}
             <div className="flex justify-between gap-4">
-                <Button variant="outline" onClick={onBack} className="gap-2">
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                </Button>
-                <Button onClick={() => onNext(weights)} size="lg" className="gap-2">
-                    Continue to Rating
-                    <ArrowRight className="h-5 w-5" />
-                </Button>
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <Button variant="outline" onClick={onBack} className="gap-2 group">
+                        <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+                        Back
+                    </Button>
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <Button onClick={() => onNext(weights)} size="lg" className="gap-2 group">
+                        Continue to Rating
+                        <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                    </Button>
+                </motion.div>
             </div>
         </motion.div>
     );

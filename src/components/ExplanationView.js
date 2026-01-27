@@ -432,9 +432,10 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
                             Why {calculations.winner.option} Won
                         </h3>
                         {isLoadingExplanation ? (
-                            <div className="flex items-center gap-3 py-4">
-                                <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                <span className="text-muted-foreground">Analyzing your decision data...</span>
+                            <div className="space-y-3 py-2">
+                                <div className="h-4 w-full bg-muted/50 rounded animate-pulse" />
+                                <div className="h-4 w-full bg-muted/50 rounded animate-pulse" />
+                                <div className="h-4 w-3/4 bg-muted/50 rounded animate-pulse" />
                             </div>
                         ) : (
                             <>
@@ -461,14 +462,18 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
 
                     {/* Navigation */}
                     <div className="flex justify-between">
-                        <Button variant="outline" onClick={onReset}>
-                            <RotateCcw className="mr-2 h-4 w-4" />
-                            Start New Analysis
-                        </Button>
-                        <Button onClick={nextPage}>
-                            See Details
-                            <ChevronRight className="ml-2 h-4 w-4" />
-                        </Button>
+                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                            <Button variant="outline" onClick={onReset} className="group">
+                                <RotateCcw className="mr-2 h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
+                                Start New Analysis
+                            </Button>
+                        </motion.div>
+                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                            <Button onClick={nextPage} className="group">
+                                See Details
+                                <ChevronRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                            </Button>
+                        </motion.div>
                     </div>
                 </motion.div>
             )}
@@ -639,14 +644,18 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
 
                     {/* Navigation */}
                     <div className="flex justify-between">
-                        <Button variant="outline" onClick={prevPage}>
-                            <ChevronLeft className="mr-2 h-4 w-4" />
-                            Back to Result
-                        </Button>
-                        <Button onClick={nextPage}>
-                            {shouldShowLLMPage ? 'See LLM Recommendation' : 'See Summary'}
-                            <ChevronRight className="ml-2 h-4 w-4" />
-                        </Button>
+                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                            <Button variant="outline" onClick={prevPage} className="group">
+                                <ChevronLeft className="mr-2 h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+                                Back to Result
+                            </Button>
+                        </motion.div>
+                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                            <Button onClick={nextPage} className="group">
+                                {shouldShowLLMPage ? 'See LLM Recommendation' : 'See Summary'}
+                                <ChevronRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                            </Button>
+                        </motion.div>
                     </div>
                 </motion.div>
             )}
@@ -715,14 +724,18 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
                     </Card>
 
                     <div className="flex justify-between">
-                        <Button variant="outline" onClick={prevPage}>
-                            <ChevronLeft className="mr-2 h-4 w-4" />
-                            Back to Details
-                        </Button>
-                        <Button onClick={nextPage}>
-                            See Summary
-                            <ChevronRight className="ml-2 h-4 w-4" />
-                        </Button>
+                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                            <Button variant="outline" onClick={prevPage} className="group">
+                                <ChevronLeft className="mr-2 h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+                                Back to Details
+                            </Button>
+                        </motion.div>
+                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                            <Button onClick={nextPage} className="group">
+                                See Summary
+                                <ChevronRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                            </Button>
+                        </motion.div>
                     </div>
                 </motion.div>
             )}
@@ -783,9 +796,10 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
                             </h4>
                             <p className="text-sm text-muted-foreground mb-3">Worth considering:</p>
                             {isLoadingSuggestions ? (
-                                <div className="flex items-center gap-2 py-2">
-                                    <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                    <span className="text-sm text-muted-foreground">Loading...</span>
+                                <div className="space-y-2">
+                                    <div className="h-8 bg-muted/50 rounded-lg animate-pulse" />
+                                    <div className="h-8 bg-muted/50 rounded-lg animate-pulse" />
+                                    <div className="h-8 bg-muted/50 rounded-lg animate-pulse" />
                                 </div>
                             ) : suggestions.otherOptions.length > 0 ? (
                                 <ul className="text-sm text-muted-foreground space-y-1.5 pl-4 list-disc">
@@ -805,9 +819,9 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
                             </h4>
                             <p className="text-sm text-muted-foreground mb-3">You might also consider:</p>
                             {isLoadingSuggestions ? (
-                                <div className="flex items-center gap-2 py-2">
-                                    <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                    <span className="text-sm text-muted-foreground">Loading...</span>
+                                <div className="space-y-2">
+                                    <div className="h-8 bg-muted/50 rounded-lg animate-pulse" />
+                                    <div className="h-8 bg-muted/50 rounded-lg animate-pulse" />
                                 </div>
                             ) : suggestions.missingCriteria.length > 0 ? (
                                 <ul className="text-sm text-muted-foreground space-y-1.5 pl-4 list-disc">
@@ -827,9 +841,9 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
                             </h4>
                             <p className="text-sm text-muted-foreground mb-3">Follow-up decisions:</p>
                             {isLoadingSuggestions ? (
-                                <div className="flex items-center gap-2 py-2">
-                                    <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                    <span className="text-sm text-muted-foreground">Loading...</span>
+                                <div className="space-y-2">
+                                    <div className="h-8 bg-muted/50 rounded-lg animate-pulse" />
+                                    <div className="h-8 bg-muted/50 rounded-lg animate-pulse" />
                                 </div>
                             ) : suggestions.followUpDilemmas.length > 0 ? (
                                 <ul className="text-sm text-muted-foreground space-y-1.5 pl-4 list-disc">
@@ -845,10 +859,16 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
 
                     {/* Final Action */}
                     <div className="text-center">
-                        <Button onClick={onReset} size="lg">
-                            <RotateCcw className="mr-2 h-5 w-5" />
-                            Start New Analysis
-                        </Button>
+                        <motion.div 
+                            whileHover={{ scale: 1.05 }} 
+                            whileTap={{ scale: 0.95 }}
+                            className="inline-block"
+                        >
+                            <Button onClick={onReset} size="lg" className="group">
+                                <RotateCcw className="mr-2 h-5 w-5 group-hover:rotate-180 transition-transform duration-500" />
+                                Start New Analysis
+                            </Button>
+                        </motion.div>
                     </div>
                 </motion.div>
             )}
