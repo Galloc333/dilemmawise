@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { useConfetti } from '@/hooks/useConfetti';
 
 export default function ExplanationView({ results, userContext = {}, dilemma, options: optionsProp, criteria: criteriaProp, onReset, onBackToRating, onEditOptions }) {
     const { scores, weights, ranking } = results;
@@ -20,6 +21,7 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
 
     const [currentPage, setCurrentPage] = useState(1);
     const totalPages = 4;
+    const [hasShownConfetti, setHasShownConfetti] = useState(false);
 
     const [dataAnalysis, setDataAnalysis] = useState('');
     const [whatCouldChange, setWhatCouldChange] = useState('');
@@ -94,6 +96,16 @@ export default function ExplanationView({ results, userContext = {}, dilemma, op
             runnerUp
         };
     }, [ranking, scores, weights, criteria, options]);
+
+    // Confetti celebration when results load
+    const shouldTriggerConfetti = !hasShownConfetti && currentPage === 1;
+    useConfetti({ trigger: shouldTriggerConfetti, duration: 3000 });
+    
+    useEffect(() => {
+        if (!hasShownConfetti && currentPage === 1) {
+            setHasShownConfetti(true);
+        }
+    }, [hasShownConfetti, currentPage]);
 
     useEffect(() => {
         const fetchExplanations = async () => {
