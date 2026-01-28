@@ -55,37 +55,52 @@ git clone https://github.com/Galloc333/dilemmawise.git
 cd dilemmawise
 ```
 
-#### 3. Set up environment variables
+#### 3. Run the setup script
 
-Create a `.env` file in the root directory:
+**Windows (PowerShell):**
 
-```env
-GOOGLE_AI_API_KEY=your_api_key_here
+```powershell
+.\docker-start.ps1
 ```
+
+**Mac/Linux:**
+
+```bash
+chmod +x docker-start.sh
+./docker-start.sh
+```
+
+The script will automatically:
+- Check if Docker is installed and running
+- Create the `.env` file if it doesn't exist
+- Open it for you to add your Google AI API key
+- Build and start the application
 
 Get your free API key at: https://aistudio.google.com/apikey
 
-#### 4. Start the application
-
-```bash
-docker-compose up --build
-```
-
 The first build takes 3-5 minutes. Subsequent starts are much faster.
 
-#### 5. Access the application
+#### 4. Access the application
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-#### Docker Commands
+#### Stopping the application
+
+Press `Ctrl + C` in the terminal, or run:
+
+```bash
+docker-compose down
+```
+
+#### Common Commands
 
 | Command | Description |
 | ------- | ----------- |
-| `docker-compose up` | Start the application |
-| `docker-compose up -d` | Start in background (detached) |
+| `.\docker-start.ps1` (Windows) or `./docker-start.sh` (Mac/Linux) | Start the application with guided setup |
+| `docker-compose up` | Restart the application (after initial setup) |
+| `Ctrl + C` | Stop the application |
 | `docker-compose down` | Stop and remove containers |
 | `docker-compose logs -f` | View real-time logs |
-| `Ctrl + C` | Stop the application |
 
 ---
 
