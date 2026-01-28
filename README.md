@@ -51,7 +51,7 @@ After installation, **open Docker Desktop** and wait for it to start (check the 
 #### 2. Clone the repository
 
 ```bash
-git clone https://github.com/maximbudnev/dilemmawise.git
+git clone https://github.com/Galloc333/dilemmawise.git
 cd dilemmawise
 ```
 
@@ -96,7 +96,7 @@ For local development with hot reload and debugging.
 #### 1. Clone the repository
 
 ```bash
-git clone https://github.com/maximbudnev/dilemmawise.git
+git clone https://github.com/Galloc333/dilemmawise.git
 cd dilemmawise
 ```
 
