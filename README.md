@@ -25,32 +25,39 @@ DilemmaWise helps you make better decisions through structured analysis and AI-g
 
 ## Requirements
 
+**Option A: Docker (Recommended)**
+- **Docker Desktop** (easiest way to run in any environment)
+- **Google AI API Key** (free tier available)
+
+**Option B: Manual Setup**
 - **Node.js** 18.17 or later (20.x recommended)
 - **npm** 9+ or **pnpm** 8+
 - **Google AI API Key** (free tier available)
 
 ## Quick Start
 
-### 1. Clone the repository
+### Option A: Run with Docker (Recommended)
+
+Docker provides the easiest way to run DilemmaWise in any environment without installing Node.js or managing dependencies.
+
+#### 1. Install Docker Desktop
+
+Download and install Docker Desktop for your operating system:
+- **Windows/Mac**: https://www.docker.com/products/docker-desktop
+- **Linux**: `sudo apt-get install docker.io docker-compose`
+
+After installation, **open Docker Desktop** and wait for it to start (check the system tray for the whale icon 🐋).
+
+#### 2. Clone the repository
 
 ```bash
 git clone https://github.com/maximbudnev/dilemmawise.git
 cd dilemmawise
 ```
 
-### 2. Install dependencies
+#### 3. Set up environment variables
 
-```bash
-npm install
-```
-
-### 3. Set up environment variables
-
-```bash
-cp .env.example .env.local
-```
-
-Then edit `.env.local` and add your API key:
+Create a `.env` file in the root directory:
 
 ```env
 GOOGLE_AI_API_KEY=your_api_key_here
@@ -58,7 +65,58 @@ GOOGLE_AI_API_KEY=your_api_key_here
 
 Get your free API key at: https://aistudio.google.com/apikey
 
-### 4. Run the development server
+#### 4. Start the application
+
+```bash
+docker-compose up --build
+```
+
+The first build takes 3-5 minutes. Subsequent starts are much faster.
+
+#### 5. Access the application
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+#### Docker Commands
+
+| Command | Description |
+| ------- | ----------- |
+| `docker-compose up` | Start the application |
+| `docker-compose up -d` | Start in background (detached) |
+| `docker-compose down` | Stop and remove containers |
+| `docker-compose logs -f` | View real-time logs |
+| `Ctrl + C` | Stop the application |
+
+---
+
+### Option B: Run with Node.js (Development)
+
+For local development with hot reload and debugging.
+
+#### 1. Clone the repository
+
+```bash
+git clone https://github.com/maximbudnev/dilemmawise.git
+cd dilemmawise
+```
+
+#### 2. Install dependencies
+
+```bash
+npm install
+```
+
+#### 3. Set up environment variables
+
+Create a `.env.local` file in the root directory:
+
+```env
+GOOGLE_AI_API_KEY=your_api_key_here
+```
+
+Get your free API key at: https://aistudio.google.com/apikey
+
+#### 4. Run the development server
 
 ```bash
 npm run dev
@@ -83,6 +141,18 @@ All environment variables are **server-side only** and never exposed to the clie
 - **SEARCH_ENGINE_ID**: [Programmable Search Engine](https://programmablesearchengine.google.com/) (optional)
 
 ## Scripts
+
+### Docker Commands
+
+| Command                     | Description                       |
+| --------------------------- | --------------------------------- |
+| `docker-compose up --build` | Build and start the application   |
+| `docker-compose up`         | Start the application             |
+| `docker-compose up -d`      | Start in background               |
+| `docker-compose down`       | Stop and remove containers        |
+| `docker-compose logs -f`    | View logs in real-time            |
+
+### Node.js Commands
 
 | Command                | Description                              |
 | ---------------------- | ---------------------------------------- |
@@ -142,13 +212,41 @@ src/
 
 ## Troubleshooting
 
-### "Missing API Key" or API errors
+### Docker Issues
+
+#### "Docker is not running" or "cannot connect to Docker daemon"
+
+- Make sure Docker Desktop is **running** (check system tray for whale icon)
+- On Windows, ensure WSL2 is installed: `wsl --install`
+- Restart Docker Desktop or your computer
+
+#### Port 3000 already in use
+
+Change the port in `docker-compose.yml`:
+
+```yaml
+ports:
+  - "8080:3000"  # Use port 8080 instead
+```
+
+Then access the app at http://localhost:8080
+
+#### Need to rebuild after code changes
+
+```bash
+docker-compose down
+docker-compose up --build
+```
+
+### Node.js Issues
+
+#### "Missing API Key" or API errors
 
 - Ensure `.env.local` exists with `GOOGLE_AI_API_KEY=your_key`
 - Restart the dev server after changing env vars
 - Check that your API key is valid at [AI Studio](https://aistudio.google.com/)
 
-### Styles not applying / Tailwind not working
+#### Styles not applying / Tailwind not working
 
 ```bash
 # Clear Next.js cache and restart
@@ -156,7 +254,7 @@ rm -rf .next
 npm run dev
 ```
 
-### Node version mismatch
+#### Node version mismatch
 
 This project requires Node.js 18.17+. Check your version:
 
@@ -170,7 +268,7 @@ If using nvm:
 nvm use
 ```
 
-### Build errors
+#### Build errors
 
 ```bash
 # Clean install
@@ -178,6 +276,34 @@ rm -rf node_modules .next
 npm install
 npm run build
 ```
+
+## Deployment
+
+DilemmaWise can be deployed to any platform that supports Docker or Node.js.
+
+### Deploy with Docker
+
+The included `Dockerfile` and `docker-compose.yml` work with any Docker-compatible platform:
+
+- **Render.com** — Easiest, auto-detects Dockerfile
+- **Railway.app** — Simple GitHub integration
+- **Google Cloud Run** — Serverless containers
+- **AWS ECS** — Elastic Container Service
+- **Azure Container Instances** — Managed containers
+- **DigitalOcean App Platform** — Simple Docker deployment
+
+Make sure to set the `GOOGLE_AI_API_KEY` environment variable in your platform's settings.
+
+### Deploy with Vercel/Netlify
+
+For traditional Next.js deployment without Docker:
+
+```bash
+npm run build
+npm start
+```
+
+Or connect your repository to [Vercel](https://vercel.com) for automatic deployments.
 
 ## Documentation
 
