@@ -57,6 +57,12 @@ cd dilemmawise
 
 #### 3. Run the setup script
 
+**Windows (Command Prompt - easiest):**
+
+```cmd
+docker-start.bat
+```
+
 **Windows (PowerShell):**
 
 ```powershell
@@ -96,7 +102,9 @@ docker-compose down
 
 | Command | Description |
 | ------- | ----------- |
-| `.\docker-start.ps1` (Windows) or `./docker-start.sh` (Mac/Linux) | Start the application with guided setup |
+| `docker-start.bat` (Windows CMD) | Start with guided setup (easiest) |
+| `.\docker-start.ps1` (Windows PowerShell) | Start with guided setup |
+| `./docker-start.sh` (Mac/Linux) | Start with guided setup |
 | `docker-compose up` | Restart the application (after initial setup) |
 | `Ctrl + C` | Stop the application |
 | `docker-compose down` | Stop and remove containers |
