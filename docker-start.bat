@@ -46,12 +46,8 @@ if not exist ".env" (
     notepad.exe .env
     
     echo.
-    set /p continue="Have you added your API key? (yes/no): "
-    if /i not "%continue%"=="yes" (
-        echo Please add your API key and run this script again.
-        pause
-        exit /b 0
-    )
+    echo Press Enter when you have added your API key...
+    pause >nul
 ) else (
     echo [OK] .env file found
 )
@@ -63,7 +59,15 @@ echo This may take 3-5 minutes on first run
 echo ========================================
 echo.
 
+REM Start docker-compose
 docker-compose up --build
+
+echo.
+echo ========================================
+echo [OK] DilemmaWise has stopped.
+echo To start again, run: docker-compose up
+echo ========================================
+pause
 
 echo.
 echo [OK] DilemmaWise has stopped.
