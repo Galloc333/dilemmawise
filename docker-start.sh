@@ -96,3 +96,4 @@ echo ""
 echo "✓ DilemmaWise has stopped."
 echo "To start again, run: docker-compose up"
 
+
